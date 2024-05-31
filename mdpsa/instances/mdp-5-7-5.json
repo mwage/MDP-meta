@@ -1,0 +1,137 @@
+{
+  "resources": 5,
+  "horizon": 10080,
+  "duration_regular": 150,
+  "duration_major": 840,
+  "time_regular": 4320,
+  "tasks": [
+    {
+      "start": 525,
+      "length": 1010
+    },
+    {
+      "start": 630,
+      "length": 1065
+    },
+    {
+      "start": 635,
+      "length": 755
+    },
+    {
+      "start": 640,
+      "length": 1545
+    },
+    {
+      "start": 655,
+      "length": 990
+    },
+    {
+      "start": 1630,
+      "length": 755
+    },
+    {
+      "start": 2070,
+      "length": 1250
+    },
+    {
+      "start": 2170,
+      "length": 825
+    },
+    {
+      "start": 2575,
+      "length": 1455
+    },
+    {
+      "start": 2770,
+      "length": 1050
+    },
+    {
+      "start": 3395,
+      "length": 800
+    },
+    {
+      "start": 3415,
+      "length": 990
+    },
+    {
+      "start": 4255,
+      "length": 1235
+    },
+    {
+      "start": 4300,
+      "length": 995
+    },
+    {
+      "start": 4595,
+      "length": 580
+    },
+    {
+      "start": 4895,
+      "length": 1280
+    },
+    {
+      "start": 4950,
+      "length": 1310
+    },
+    {
+      "start": 5685,
+      "length": 615
+    },
+    {
+      "start": 5955,
+      "length": 1485
+    },
+    {
+      "start": 6330,
+      "length": 1230
+    },
+    {
+      "start": 6445,
+      "length": 550
+    },
+    {
+      "start": 6475,
+      "length": 725
+    },
+    {
+      "start": 7695,
+      "length": 1400
+    },
+    {
+      "start": 7750,
+      "length": 855
+    },
+    {
+      "start": 7800,
+      "length": 685
+    },
+    {
+      "start": 7895,
+      "length": 780
+    },
+    {
+      "start": 7895,
+      "length": 705
+    },
+    {
+      "start": 8635,
+      "length": 1290
+    },
+    {
+      "start": 9170,
+      "length": 875
+    },
+    {
+      "start": 9305,
+      "length": 565
+    },
+    {
+      "start": 9335,
+      "length": 1550
+    },
+    {
+      "start": 10079,
+      "length": 915
+    }
+  ]
+}

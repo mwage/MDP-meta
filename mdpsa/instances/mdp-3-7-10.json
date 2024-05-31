@@ -1,0 +1,117 @@
+{
+  "resources": 3,
+  "horizon": 10080,
+  "duration_regular": 150,
+  "duration_major": 840,
+  "time_regular": 4320,
+  "tasks": [
+    {
+      "start": 0,
+      "length": 1345
+    },
+    {
+      "start": 0,
+      "length": 840
+    },
+    {
+      "start": 0,
+      "length": 845
+    },
+    {
+      "start": 840,
+      "length": 1150
+    },
+    {
+      "start": 845,
+      "length": 1420
+    },
+    {
+      "start": 1345,
+      "length": 1335
+    },
+    {
+      "start": 1990,
+      "length": 985
+    },
+    {
+      "start": 2265,
+      "length": 615
+    },
+    {
+      "start": 2680,
+      "length": 550
+    },
+    {
+      "start": 2880,
+      "length": 965
+    },
+    {
+      "start": 2975,
+      "length": 665
+    },
+    {
+      "start": 3230,
+      "length": 840
+    },
+    {
+      "start": 3790,
+      "length": 1490
+    },
+    {
+      "start": 3995,
+      "length": 1495
+    },
+    {
+      "start": 4910,
+      "length": 1045
+    },
+    {
+      "start": 5280,
+      "length": 1570
+    },
+    {
+      "start": 5490,
+      "length": 805
+    },
+    {
+      "start": 5955,
+      "length": 1355
+    },
+    {
+      "start": 6295,
+      "length": 1395
+    },
+    {
+      "start": 7310,
+      "length": 1160
+    },
+    {
+      "start": 7690,
+      "length": 715
+    },
+    {
+      "start": 8405,
+      "length": 1540
+    },
+    {
+      "start": 8470,
+      "length": 650
+    },
+    {
+      "start": 8530,
+      "length": 555
+    },
+    {
+      "start": 9085,
+      "length": 1085
+    },
+    {
+      "start": 9270,
+      "length": 1425
+    },
+    {
+      "start": 9945,
+      "length": 1035
+    }
+  ]
+}

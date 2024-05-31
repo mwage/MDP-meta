@@ -1,0 +1,141 @@
+{
+  "resources": 5,
+  "horizon": 10080,
+  "duration_regular": 150,
+  "duration_major": 840,
+  "time_regular": 4320,
+  "tasks": [
+    {
+      "start": 0,
+      "length": 1390
+    },
+    {
+      "start": 0,
+      "length": 1180
+    },
+    {
+      "start": 0,
+      "length": 755
+    },
+    {
+      "start": 0,
+      "length": 1560
+    },
+    {
+      "start": 800,
+      "length": 615
+    },
+    {
+      "start": 1200,
+      "length": 880
+    },
+    {
+      "start": 1505,
+      "length": 1505
+    },
+    {
+      "start": 1665,
+      "length": 660
+    },
+    {
+      "start": 1875,
+      "length": 1040
+    },
+    {
+      "start": 2180,
+      "length": 1520
+    },
+    {
+      "start": 2340,
+      "length": 1220
+    },
+    {
+      "start": 2995,
+      "length": 1310
+    },
+    {
+      "start": 3115,
+      "length": 610
+    },
+    {
+      "start": 3130,
+      "length": 805
+    },
+    {
+      "start": 3835,
+      "length": 1135
+    },
+    {
+      "start": 3850,
+      "length": 1190
+    },
+    {
+      "start": 3975,
+      "length": 1180
+    },
+    {
+      "start": 4085,
+      "length": 1185
+    },
+    {
+      "start": 4305,
+      "length": 1555
+    },
+    {
+      "start": 5270,
+      "length": 1195
+    },
+    {
+      "start": 5455,
+      "length": 1000
+    },
+    {
+      "start": 5570,
+      "length": 1050
+    },
+    {
+      "start": 6260,
+      "length": 1365
+    },
+    {
+      "start": 7110,
+      "length": 1385
+    },
+    {
+      "start": 7160,
+      "length": 1035
+    },
+    {
+      "start": 7505,
+      "length": 1440
+    },
+    {
+      "start": 7915,
+      "length": 565
+    },
+    {
+      "start": 8375,
+      "length": 790
+    },
+    {
+      "start": 8890,
+      "length": 1050
+    },
+    {
+      "start": 8915,
+      "length": 1115
+    },
+    {
+      "start": 9385,
+      "length": 805
+    },
+    {
+      "start": 9460,
+      "length": 1260
+    },
+    {
+      "start": 10079,
+      "length": 1410
+    }
+  ]
+}

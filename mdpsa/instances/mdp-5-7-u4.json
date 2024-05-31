@@ -1,0 +1,153 @@
+{
+  "resources": 5,
+  "horizon": 10080,
+  "duration_regular": 150,
+  "duration_major": 840,
+  "time_regular": 4320,
+  "tasks": [
+    {
+      "start": 550,
+      "length": 1035
+    },
+    {
+      "start": 550,
+      "length": 1370
+    },
+    {
+      "start": 570,
+      "length": 1285
+    },
+    {
+      "start": 755,
+      "length": 1430
+    },
+    {
+      "start": 775,
+      "length": 695
+    },
+    {
+      "start": 1960,
+      "length": 1145
+    },
+    {
+      "start": 2040,
+      "length": 610
+    },
+    {
+      "start": 2165,
+      "length": 740
+    },
+    {
+      "start": 2170,
+      "length": 1460
+    },
+    {
+      "start": 2255,
+      "length": 1405
+    },
+    {
+      "start": 3005,
+      "length": 1410
+    },
+    {
+      "start": 3365,
+      "length": 1430
+    },
+    {
+      "start": 3455,
+      "length": 1530
+    },
+    {
+      "start": 3980,
+      "length": 1155
+    },
+    {
+      "start": 4020,
+      "length": 970
+    },
+    {
+      "start": 4860,
+      "length": 625
+    },
+    {
+      "start": 4920,
+      "length": 1020
+    },
+    {
+      "start": 5140,
+      "length": 570
+    },
+    {
+      "start": 5555,
+      "length": 1330
+    },
+    {
+      "start": 5940,
+      "length": 1480
+    },
+    {
+      "start": 6295,
+      "length": 780
+    },
+    {
+      "start": 6530,
+      "length": 885
+    },
+    {
+      "start": 7110,
+      "length": 655
+    },
+    {
+      "start": 7225,
+      "length": 720
+    },
+    {
+      "start": 7370,
+      "length": 1025
+    },
+    {
+      "start": 7750,
+      "length": 725
+    },
+    {
+      "start": 7975,
+      "length": 1195
+    },
+    {
+      "start": 8399,
+      "length": 715
+    },
+    {
+      "start": 8470,
+      "length": 660
+    },
+    {
+      "start": 8520,
+      "length": 855
+    },
+    {
+      "start": 9215,
+      "length": 830
+    },
+    {
+      "start": 9225,
+      "length": 1050
+    },
+    {
+      "start": 9239,
+      "length": 1270
+    },
+    {
+      "start": 9405,
+      "length": 700
+    },
+    {
+      "start": 10045,
+      "length": 1130
+    },
+    {
+      "start": 10079,
+      "length": 1055
+    }
+  ]
+}

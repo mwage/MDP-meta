@@ -1,0 +1,177 @@
+{
+  "resources": 5,
+  "horizon": 10080,
+  "duration_regular": 150,
+  "duration_major": 840,
+  "time_regular": 4320,
+  "tasks": [
+    {
+      "start": 0,
+      "length": 1385
+    },
+    {
+      "start": 0,
+      "length": 1385
+    },
+    {
+      "start": 0,
+      "length": 1020
+    },
+    {
+      "start": 0,
+      "length": 755
+    },
+    {
+      "start": 0,
+      "length": 1560
+    },
+    {
+      "start": 755,
+      "length": 935
+    },
+    {
+      "start": 1020,
+      "length": 1240
+    },
+    {
+      "start": 1560,
+      "length": 1420
+    },
+    {
+      "start": 1690,
+      "length": 1030
+    },
+    {
+      "start": 2225,
+      "length": 625
+    },
+    {
+      "start": 2260,
+      "length": 545
+    },
+    {
+      "start": 2720,
+      "length": 1315
+    },
+    {
+      "start": 2805,
+      "length": 975
+    },
+    {
+      "start": 2850,
+      "length": 580
+    },
+    {
+      "start": 3065,
+      "length": 1000
+    },
+    {
+      "start": 3130,
+      "length": 1380
+    },
+    {
+      "start": 3430,
+      "length": 925
+    },
+    {
+      "start": 4065,
+      "length": 995
+    },
+    {
+      "start": 4185,
+      "length": 1480
+    },
+    {
+      "start": 4355,
+      "length": 1500
+    },
+    {
+      "start": 4510,
+      "length": 1280
+    },
+    {
+      "start": 5060,
+      "length": 1250
+    },
+    {
+      "start": 5665,
+      "length": 1450
+    },
+    {
+      "start": 5790,
+      "length": 860
+    },
+    {
+      "start": 5855,
+      "length": 570
+    },
+    {
+      "start": 6310,
+      "length": 905
+    },
+    {
+      "start": 6505,
+      "length": 1055
+    },
+    {
+      "start": 6575,
+      "length": 1465
+    },
+    {
+      "start": 6800,
+      "length": 925
+    },
+    {
+      "start": 7115,
+      "length": 1510
+    },
+    {
+      "start": 7365,
+      "length": 1440
+    },
+    {
+      "start": 7560,
+      "length": 570
+    },
+    {
+      "start": 7725,
+      "length": 935
+    },
+    {
+      "start": 8040,
+      "length": 1345
+    },
+    {
+      "start": 8130,
+      "length": 1520
+    },
+    {
+      "start": 8625,
+      "length": 760
+    },
+    {
+      "start": 8805,
+      "length": 585
+    },
+    {
+      "start": 9385,
+      "length": 1005
+    },
+    {
+      "start": 9390,
+      "length": 1520
+    },
+    {
+      "start": 9500,
+      "length": 825
+    },
+    {
+      "start": 9535,
+      "length": 720
+    },
+    {
+      "start": 9800,
+      "length": 1510
+    }
+  ]
+}
