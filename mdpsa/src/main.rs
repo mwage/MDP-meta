@@ -16,15 +16,15 @@ fn main() {
         let instance = Instance::new_from_file(&instance_name);
         let instance_name = instance_name.split("\\").last().unwrap().split(".").next().unwrap();
 
-        // println!("Start instance {}", instance_name);
-        let mut neighborhood = Neighborhood::new(instance);
-        // println!("Finished feasibility");
-        // println!("{:?}", neighborhood.state());
-        println!("{} feasible: {} with {}", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value());
+
     }
     
     let instance = Instance::new_from_file("./instances/mdp-3-7-5.json");
     let instance_name = "mdp-3-7-5".to_string();
 
-
+    // println!("Start instance {}", instance_name);
+    let mut neighborhood = Neighborhood::new(instance);
+    // println!("Finished feasibility");
+    println!("{:?}", neighborhood.state());
+    println!("{} feasible: {} with {}", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value());
 }

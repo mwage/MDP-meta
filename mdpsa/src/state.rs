@@ -1,9 +1,9 @@
 use bit_vec::BitVec;
-use rand::{rngs::ThreadRng, Rng};
-use crate::instance::Instance;
+use crate::{instance::Instance, neighborhood::PenaltyToken};
 use super::instance::Task;
-use rand::prelude::*;
 use std::{collections::{BTreeMap, BTreeSet}, cmp};
+use rand::{rngs::ThreadRng, Rng};
+use rand::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum JobToken {
@@ -22,10 +22,12 @@ pub struct State {
     jobs: Vec<BTreeMap<usize, JobToken>>,
     maj_maint_ends: Vec<usize>,
     reg_maint_ends: Vec<BTreeSet<usize>>,
+    task_ass: Vec<usize>,
     num_reg_maint: Vec<usize>,
     maintenance_changes: BTreeMap<usize, ChangeTimestamp>, // Number of maintenences after the timestamp
     obj_value: usize,
-    uncovered: Vec<Vec<usize>>  // Uncovered tasks
+    penalty_value: usize,
+    uncovered: Vec<BTreeSet<usize>>  // Uncovered tasks
 }
 
 impl State {
@@ -33,6 +35,7 @@ impl State {
         let res = instance.resources();
         let assigned_tasks = BitVec::from_elem(instance.tasks().len(), false);
         let assigned_maj_maint = BitVec::from_elem(res, false);
+        let task_ass = vec![usize::MAX; instance.tasks().len()];
 
         State {
             instance,
@@ -41,10 +44,12 @@ impl State {
             jobs: vec![BTreeMap::new(); res],
             maj_maint_ends: vec![0; res],
             reg_maint_ends: vec![BTreeSet::new(); res],
+            task_ass,
             num_reg_maint: vec![0; res],
             maintenance_changes: BTreeMap::new(),
             obj_value: 0, 
-            uncovered: vec![Vec::new(); res]
+            penalty_value: 0,
+            uncovered: vec![BTreeSet::new(); res]
         }
     }
 
@@ -56,6 +61,10 @@ impl State {
         self.obj_value
     }
 
+    pub fn working_obj_val(&self) -> usize {
+        self.obj_value + self.penalty_value
+    }
+
     pub fn assigned_tasks(&self) -> &BitVec {
         &self.assigned_tasks
     }
@@ -64,35 +73,23 @@ impl State {
         &self.assigned_maj_maint
     }
 
-    pub fn uncovered(&self) -> &Vec<Vec<usize>> {
+    pub fn uncovered(&self) -> &Vec<BTreeSet<usize>> {
         &self.uncovered
     }
 
-    pub fn initialize(&mut self) {
+    pub fn initialize(&mut self, initial_penalty: usize) {
+        let mut penalties = Vec::new();
         // Add major maintenances at random (non-overlapping) times
-        let mut rng = rand::thread_rng();
         for res in 0..self.instance.resources() {
             self.add_major_maintenence(res, (res+1) * self.instance.duration_major());
-            // loop {
-            //     let end_time = rng.gen_range(self.instance.duration_major()..self.instance.horizon());
-            //     if !self.overlaps_other_mm(res, end_time) {
-            //         self.add_major_maintenence(res, end_time);
-            //         break;
-            //     }                
-            // }
         }
 
         // Assign tasks to a random (free) resource
         for task_idx in 0..self.instance.tasks().len() {
-            // let mut resources: Vec<usize> = (0..self.instance.resources()).collect();
-            // resources.shuffle(&mut rng);
-            for res in 0..self.instance.resources() {
-            // for &res in resources.iter() {
-                if self.can_add_task(res, task_idx) {
-                    self.add_task(res, task_idx);
-                    break;
-                }
-            }
+            match (0..self.instance.resources()).find(|res| self.can_add_task(*res, task_idx)) {
+                Some(res) => { self.add_task(res, task_idx); },
+                None => { penalties.push(PenaltyToken::Task(task_idx)) }
+            };
         }
 
         // Add regular maintenances to cover any uncovered tasks (if possible)
@@ -111,13 +108,13 @@ impl State {
                             None => {}
                         };
                         
-                        match self.find_reg_maint_cover_greedily(res, time) {
+                        match self.find_reg_maint_cover_greedy(res, time) {
                             Some(x) => {
                                 last_added = x;
                                 to_add.push(x);
                             },
                             None => {
-                                self.uncovered[res].push(time);
+                                self.uncovered[res].insert(time);
                             }
                         }
                     },
@@ -127,76 +124,40 @@ impl State {
             for end_time in to_add {
                 self.add_regular_maintenance(res, end_time);
             }
+            last_added = 2 * self.instance.horizon();
+            // Add penalties for uncovered
+            for (&time, token) in self.jobs[res].iter().rev() {
+                if time > last_added || time < self.instance.time_regular() {
+                    continue;
+                }
+                match token {
+                    JobToken::Task(_) => {
+                        last_added = match self.jobs[res].iter().rev().filter(|(x, _)| **x < time).find(|(_, token)| *token == &JobToken::MajMaint || *token == &JobToken::RegMaint) {
+                            Some((x, _)) => *x,
+                            None => 0
+                        };
+                        let diff = time - last_added;
+                        if time - last_added > self.instance.time_regular() {
+                            penalties.push(PenaltyToken::RegMaintNotCovered(diff - self.instance.time_regular()));
+                        }
+                    },
+                    _ => last_added = time
+                }
+            }
         }
+        // Apply penalties
+        self.penalty_value += penalties.iter().map(|x| x.to_penalty(&self.instance, initial_penalty)).sum::<usize>();
+
+        // for res in 0..self.instance.resources() {
+        //     println!("mm: {:?}", self.get_neighbors(res, self.maj_maint_ends[res], true));
+        //     for rm in self.reg_maint_ends[res].iter() {
+        //         println!("rm: {:?}", self.get_neighbors(res, *rm, false));
+        //     }
+        // }
     }
 
-    pub fn overlaps_other_mm(&self, resource: usize, end_time: usize) -> bool {
-        self.maj_maint_ends.iter().enumerate().any(|(res, end)| res != resource && (*end as isize - end_time as isize).abs() < self.instance.duration_major() as isize)
-    }
-
-    pub fn can_add_task(&self, resource: usize, task_idx: usize) -> bool {
-        let start = self.instance.tasks()[task_idx].start();
-        let end = self.instance.tasks()[task_idx].end();
-        let overlap_before = match self.jobs[resource].range(..end).next_back() {
-            Some((time, _)) => *time > start,
-            None => false
-        };
-        let overlap_after = match self.jobs[resource].range(start..).next() {
-            Some((time, JobToken::MajMaint)) => end > *time - self.instance.duration_major(),
-            Some((time, JobToken::RegMaint)) => end > *time - self.instance.duration_regular(),
-            Some((_, JobToken::Task(i))) => end > self.instance.tasks()[*i].start(),
-            None => false
-        };
-
-        !overlap_before && !overlap_after
-    }
-
-    pub fn add_task(&mut self, resource: usize, task_idx: usize) {
-        self.assigned_tasks.set(task_idx, true);
-        self.jobs[resource].insert(self.instance.tasks()[task_idx].end(), JobToken::Task(task_idx));
-    }
-
-    pub fn remove_task(&mut self, resource: usize, task_idx: usize) {
-        self.assigned_tasks.set(task_idx, false);
-        self.jobs[resource].remove(&self.instance.tasks()[task_idx].end());
-    }
-
-    pub fn add_major_maintenence(&mut self, res: usize, end_time: usize) {
-        let start_time = end_time - self.instance.duration_major();
-        self.assigned_maj_maint.set(res, true);
-        self.maj_maint_ends[res] = end_time;
-        self.jobs[res].insert(end_time, JobToken::MajMaint);
-        
-        self.update_changes_maint_added(start_time, end_time);
-    }
-
-    pub fn remove_major_maintenence(&mut self, res: usize) {
-        let end_time = self.maj_maint_ends[res];
-        let start_time = end_time - self.instance.duration_major();
-        self.assigned_maj_maint.set(res, false);
-        self.maj_maint_ends[res] = 0;
-        self.jobs[res].remove(&end_time);
-
-        self.update_changes_maint_removed(start_time, end_time);
-    }
-
-    pub fn add_regular_maintenance(&mut self, res: usize, end_time: usize) {
-        let start_time = end_time - self.instance.duration_regular();
-        self.reg_maint_ends[res].insert(end_time);
-        self.num_reg_maint[res] += 1;
-        self.jobs[res].insert(end_time, JobToken::RegMaint);
-        
-        self.update_changes_maint_added(start_time, end_time);
-    }
-
-    pub fn remove_regular_maintenence(&mut self, res: usize, idx: usize) {
-        let end_time = *self.reg_maint_ends[res].iter().skip(idx).next().unwrap();
-        let start_time = end_time - self.instance.duration_regular();
-        self.reg_maint_ends[res].remove(&idx);
-        self.num_reg_maint[res] -= 1;
-        self.jobs[res].remove(&end_time);
-
-        self.update_changes_maint_removed(start_time, end_time);
+    pub fn is_feasible_quick(&self) -> bool {
+        self.penalty_value == 0
     }
 
     pub fn is_feasible(&self, requires_completeness: bool) -> bool {
@@ -249,6 +210,110 @@ impl State {
         true
     }
 
+    pub fn mm_overlaps_with_other_mm(&self, resource: usize, end_time: usize) -> bool {
+        self.maj_maint_ends.iter().enumerate().any(|(res, end)| res != resource && (*end as isize - end_time as isize).abs() < self.instance.duration_major() as isize)
+    }
+
+    pub fn can_add_task(&self, resource: usize, task_idx: usize) -> bool {
+        let start = self.instance.tasks()[task_idx].start();
+        let end = self.instance.tasks()[task_idx].end();
+        let overlap_before = match self.jobs[resource].range(..end).next_back() {
+            Some((time, _)) => *time > start,
+            None => false
+        };
+        let overlap_after = match self.jobs[resource].range(start..).next() {
+            Some((time, JobToken::MajMaint)) => end > *time - self.instance.duration_major(),
+            Some((time, JobToken::RegMaint)) => end > *time - self.instance.duration_regular(),
+            Some((_, JobToken::Task(i))) => end > self.instance.tasks()[*i].start(),
+            None => false
+        };
+
+        !overlap_before && !overlap_after
+    }
+
+    pub fn add_task(&mut self, resource: usize, task_idx: usize) {
+        self.assigned_tasks.set(task_idx, true);
+        self.task_ass[task_idx] = resource;
+        self.jobs[resource].insert(self.instance.tasks()[task_idx].end(), JobToken::Task(task_idx));
+    }
+
+    pub fn remove_task(&mut self, resource: usize, task_idx: usize) {
+        // TODO: Check if it was uncovered
+        self.assigned_tasks.set(task_idx, false);
+        self.task_ass[task_idx] = usize::MAX;
+        self.jobs[resource].remove(&self.instance.tasks()[task_idx].end());
+    }
+
+    pub fn add_major_maintenence(&mut self, res: usize, end_time: usize) {
+        let start_time = end_time - self.instance.duration_major();
+        self.assigned_maj_maint.set(res, true);
+        self.maj_maint_ends[res] = end_time;
+        self.jobs[res].insert(end_time, JobToken::MajMaint);
+        
+        self.update_changes_maint_added(start_time, end_time);
+    }
+
+    pub fn remove_major_maintenence(&mut self, res: usize) {
+        let end_time = self.maj_maint_ends[res];
+        let start_time = end_time - self.instance.duration_major();
+        self.assigned_maj_maint.set(res, false);
+        self.maj_maint_ends[res] = 0;
+        self.jobs[res].remove(&end_time);
+
+        // TODO: Check uncovered, penalties, obj change
+        self.update_changes_maint_removed(start_time, end_time);
+    }
+
+    pub fn add_regular_maintenance(&mut self, res: usize, end_time: usize) {
+        let start_time = end_time - self.instance.duration_regular();
+        self.reg_maint_ends[res].insert(end_time);
+        self.num_reg_maint[res] += 1;
+        self.jobs[res].insert(end_time, JobToken::RegMaint);
+        
+        self.update_changes_maint_added(start_time, end_time);
+    }
+
+    pub fn remove_regular_maintenence(&mut self, res: usize, end_time: usize) {
+        let start_time = end_time - self.instance.duration_regular();
+        self.reg_maint_ends[res].remove(&end_time);
+        self.num_reg_maint[res] -= 1;
+        self.jobs[res].remove(&end_time);
+
+        // TODO: Check uncovered, penalties, obj change
+
+        self.update_changes_maint_removed(start_time, end_time);
+    }
+
+    // Calculate upper and lower bounds for end time 
+    pub fn get_neighbors(&self, res: usize, time: usize, is_mm: bool) -> (usize, usize) {
+        let len = if is_mm { self.instance.duration_major() } else { self.instance.duration_regular() };
+        let mut left = match self.jobs[res].range(..time).next_back() {
+            Some((x, _)) => x + len,
+            None => len
+        };
+        let mut right = match self.jobs[res].range(time+1..).next() {
+            Some((x, job)) => x - match job {
+                JobToken::MajMaint => self.instance.duration_major(),
+                JobToken::RegMaint => self.instance.duration_regular(),
+                JobToken::Task(i) => self.instance.tasks()[*i].length()
+            },
+            None => self.instance.horizon()
+        };
+        if is_mm {
+            for other_res in 0..self.instance.resources() {
+                if other_res == res { continue; }
+                let other = self.maj_maint_ends[other_res];
+                if other < time && other + self.instance.duration_major() > left {
+                    left = other + self.instance.duration_major();
+                } else if other > time && other - self.instance.duration_major() < right {
+                    right = other - self.instance.duration_major();
+                }
+            }
+        }
+        (left, right)
+    }
+
+
     // If the task is covered by a maintenance
     fn has_maint_covered(&self, res: usize, time: usize) -> Option<usize> {
         let limit = time - self.instance.time_regular();
@@ -259,7 +324,7 @@ impl State {
     }
 
     // Add reg maintenance greedily at first suitable position
-    fn find_reg_maint_cover_greedily(&self, res: usize, time: usize) -> Option<usize> {
+    pub fn find_reg_maint_cover_greedy(&self, res: usize, time: usize) -> Option<usize> {
         let mut possible_start = cmp::max(time as isize - self.instance.time_regular() as isize - self.instance.duration_regular() as isize, 0) as usize;
         for (&job_finished, token) in self.jobs[res].range(possible_start..time) {
             let start = match token {
@@ -276,6 +341,55 @@ impl State {
         }
 
         None
+    }
+
+    // Add reg maintenance a random (but covering) position
+    pub fn find_reg_maint_cover_random(&self, res: usize, time: usize) -> Option<usize> {
+        // TODO: implement
+        let mut possible_start = cmp::max(time as isize - self.instance.time_regular() as isize - self.instance.duration_regular() as isize, 0) as usize;
+        for (&job_finished, token) in self.jobs[res].range(possible_start..time) {
+            let start = match token {
+                JobToken::MajMaint => job_finished - self.instance.duration_major(),
+                JobToken::RegMaint => job_finished - self.instance.duration_regular(),
+                JobToken::Task(i) => self.instance.tasks()[*i].start(),
+            };
+            if start < possible_start || start - possible_start < self.instance.duration_regular() {
+                possible_start = job_finished;
+                continue;
+            }
+            // Found a suitable slot
+            return Some(possible_start + self.instance.duration_regular())
+        }
+
+        // None
+
+        unimplemented!()
+    }
+
+    // (res, time)
+    pub fn get_rand_rm(&self) -> Option<(usize, usize)> {
+        let mut rng = thread_rng();
+        if self.reg_maint_ends.iter().all(|x| x.is_empty()) {
+            return None;
+        }
+        loop {
+            let res = rng.gen_range(0..self.instance.resources());
+            if self.reg_maint_ends[res].is_empty() { continue; }
+
+            return Some((res, *self.reg_maint_ends[res].iter().skip(rng.gen_range(0..self.reg_maint_ends[res].len())).next().unwrap()))
+        }
+    }
+
+    // res
+    pub fn get_rand_mm(&self) -> usize {
+        let mut rng = thread_rng();
+        rng.gen_range(0..self.instance.resources())
+    }
+
+    // taskid
+    pub fn get_rand_task(&self) -> usize {
+        let mut rng = thread_rng();
+        rng.gen_range(0..self.instance.tasks().len())
     }
 
     fn update_changes_maint_added(&mut self, start_time: usize, end_time: usize) {
