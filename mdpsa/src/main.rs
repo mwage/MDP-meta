@@ -18,4 +18,5 @@ fn main() {
     state.initialize();
     
     println!("{:?}", state);
+    println!("Feasible: {}", state.is_feasible(false));
 }

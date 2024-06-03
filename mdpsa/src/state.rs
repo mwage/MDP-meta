@@ -49,7 +49,6 @@ impl State {
 
     pub fn initialize(&mut self) {
         let mut rng = rand::thread_rng();
-
         for res in 0..self.instance.resources() {
             loop {
                 let end_time = rng.gen_range(self.instance.duration_major()..self.instance.horizon());
@@ -61,13 +60,14 @@ impl State {
         }
 
         for task_idx in 0..self.instance.tasks().len() {
-            let mut order: Vec<usize> = (0..self.instance.resources()).collect();
-            order.shuffle(&mut rng);
-            for &res in order.iter() {
+            for res in 0..self.instance.resources() {
                 println!("try add task {} to res {}", task_idx, res);
                 if self.can_add_task(res, task_idx) {
                     self.add_task(res, task_idx);
                     break;
+                }
+                if res == self.instance.resources() - 1 {
+                    println!("Failed to add task {}", task_idx);
                 }
             }
         }
@@ -75,6 +75,7 @@ impl State {
         for res in 0..self.instance.resources() {
             let mut to_add = Vec::new();
             let mut last_added = 2 * self.instance.horizon();
+            // Iterate jobs on resource in reverse order
             for (&time, token) in self.jobs[res].iter().rev() {
                 if time > last_added || time < self.instance.time_regular() {
                     continue;
@@ -82,37 +83,22 @@ impl State {
                 println!("Try fix res {} time {}", res, time);
                 match token {
                     JobToken::Task(_) => {
-                        let limit = time - self.instance.time_regular();
-                        if self.jobs[res].range(limit..time).any(|x| x.1 == &JobToken::MajMaint || x.1 == &JobToken::RegMaint) {
-                            // Maintanence ended within time frame
-                            continue;
-                        }
-
-                        // Add reg maintenance greedily at first suitable position
-                        let mut possible_start = limit - self.instance.duration_regular();
-                        let mut success = false;
-                        for (&job_finished, token) in self.jobs[res].range(possible_start..time) {
-                            let start = match token {
-                                JobToken::MajMaint => job_finished - self.instance.duration_major(),
-                                JobToken::RegMaint => job_finished - self.instance.duration_regular(),
-                                JobToken::Task(i) => self.instance.tasks()[*i].start(),
-                            };
-                            if start < possible_start || start - possible_start < self.instance.duration_regular() {
-                                possible_start = job_finished;
-                                continue;
+                        match self.has_maint_covered(res, time) {
+                            Some(x) => { last_added = x; continue; },
+                            None => {}
+                        };
+                        
+                        match self.find_reg_maint_cover_greedily(res, time) {
+                            Some(x) => {
+                                println!("Added at {}", x);
+                                last_added = x;
+                                to_add.push(x);
+                            },
+                            None => {
+                                // TODO: Penalties for missing maint
+                                eprintln!("No maint slot");
                             }
-                            // Found a suitable slot
-                            success = true;
                         }
-                        if success {
-                            last_added = possible_start + self.instance.duration_regular();
-                            println!("Added at {}", last_added);
-                            to_add.push(last_added);
-                        } else {
-                            // TODO: Penalties for missing maint
-                            eprintln!("No maint slot");
-                        }
-
                     },
                     _ => {}
                 };
@@ -121,6 +107,35 @@ impl State {
                 self.add_regular_maintenance(res, end_time);
             }
         }
+    }
+
+    // If the task is covered by a maintenance
+    fn has_maint_covered(&self, res: usize, time: usize) -> Option<usize> {
+        let limit = time - self.instance.time_regular();
+        match self.jobs[res].range(limit..time).find(|x| x.1 == &JobToken::MajMaint || x.1 == &JobToken::RegMaint) {
+            Some(x) => Some(*x.0),
+            None => None
+        }
+    }
+
+    // Add reg maintenance greedily at first suitable position
+    fn find_reg_maint_cover_greedily(&self, res: usize, time: usize) -> Option<usize> {
+        let mut possible_start = time - self.instance.time_regular() - self.instance.duration_regular();
+        for (&job_finished, token) in self.jobs[res].range(possible_start..time) {
+            let start = match token {
+                JobToken::MajMaint => job_finished - self.instance.duration_major(),
+                JobToken::RegMaint => job_finished - self.instance.duration_regular(),
+                JobToken::Task(i) => self.instance.tasks()[*i].start(),
+            };
+            if start < possible_start || start - possible_start < self.instance.duration_regular() {
+                possible_start = job_finished;
+                continue;
+            }
+            // Found a suitable slot
+            return Some(possible_start + self.instance.duration_regular())
+        }
+
+        None
     }
 
     pub fn overlaps_other_mm(&self, resource: usize, end_time: usize) -> bool {
@@ -247,6 +262,46 @@ impl State {
         if self.maintenance_changes.get_mut(&end_time).unwrap().num_changed == 0 {
             self.maintenance_changes.remove(&end_time);
         };
+    }
+
+    pub fn is_feasible(&self, requires_completeness: bool) -> bool {
+        // All mandatory jobs assigned 
+        if requires_completeness && (!self.assigned_maj_maint.all() || !self.assigned_tasks.all()) { return false; }
+
+        // Correct maint assignments
+        for (i, time) in self.maj_maint_ends.iter().enumerate() {
+            if self.jobs[i].get(time) != Some(&JobToken::MajMaint) {
+                return false;
+            }
+        }
+        // Maj maint overlaps
+        for i in 0..self.instance.resources() {
+            for j in i+1..self.instance.resources() {
+                if self.maj_maint_ends[i].abs_diff(self.maj_maint_ends[j]) < self.instance.duration_major() { return false; }
+            }
+        }
+        // No overlap + maint coverage + maj uniqueness + reg matching
+        let mut tasks = self.assigned_tasks.clone();
+        tasks.negate();
+        for (res, jobs) in self.jobs.iter().enumerate() {
+            for (time, job) in jobs.iter() {
+                match job {
+                    JobToken::MajMaint => {
+                        if *time != self.maj_maint_ends[res] { return false; }
+                    },
+                    JobToken::RegMaint => { 
+                        if !self.reg_maint_ends[res].contains(time) { return false; }
+                    },
+                    JobToken::Task(i) => {
+                        if tasks[*i] || (*time > self.instance.time_regular() && self.has_maint_covered(res, *time).is_none()) { return false; }   // Double assignment or unassigned occurring
+                        tasks.set(*i, true);
+                    }
+                }
+            }
+            if self.reg_maint_ends[res].len() != self.num_reg_maint[res] { return false; }
+        }
+
+        true
     }
 }
 
