@@ -1,20 +1,17 @@
 use rand::Rng;
+use super::neighborhood::Neighborhood;
+
 use super::state::State;
 use std::f64::consts::E;
 
-pub trait Neighborhood {
-    fn get_next(&mut self) -> f64;
-    fn apply_move(&mut self);
-}
-
-pub struct SimulatedAnnealing<N: Neighborhood> {
+pub struct SimulatedAnnealing {
     parameters: SAParameters,
     temperature: f64,
-    neighborhood: N
+    neighborhood: Neighborhood
 }
 
-impl<N> SimulatedAnnealing<N> where N: Neighborhood {
-    pub fn new(neighborhood: N, parameters: SAParameters) -> Self {
+impl SimulatedAnnealing {
+    pub fn new(neighborhood: Neighborhood, parameters: SAParameters) -> Self {
         let temperature = parameters.initial_temperature();
 
         SimulatedAnnealing {
@@ -42,7 +39,7 @@ impl<N> SimulatedAnnealing<N> where N: Neighborhood {
         false
     }
 
-    pub fn extract(self) -> (N, SAParameters) {
+    pub fn extract(self) -> (Neighborhood, SAParameters) {
         (self.neighborhood, self.parameters)
     }
     
@@ -58,7 +55,6 @@ impl<N> SimulatedAnnealing<N> where N: Neighborhood {
             iterations += 1;
             if self.accept(delta) {
                 total_delta += delta;
-                self.neighborhood.apply_move();
                 iterations_since_accept = 0;
                 if total_delta < best_delta {
                     best_delta = total_delta;
@@ -66,6 +62,7 @@ impl<N> SimulatedAnnealing<N> where N: Neighborhood {
                     // self.neighborhood.set_best();
                 }
             } else {
+                self.neighborhood.undo_move();
                 iterations_since_accept += 1;
             }
 
