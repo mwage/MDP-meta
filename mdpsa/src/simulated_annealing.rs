@@ -54,6 +54,7 @@ impl SimulatedAnnealing {
             iterations_since_improvement += 1;
             iterations += 1;
             if self.accept(delta) {
+                self.neighborhood.accept();
                 total_delta += delta;
                 iterations_since_accept = 0;
                 if total_delta < best_delta {
@@ -62,7 +63,7 @@ impl SimulatedAnnealing {
                     // self.neighborhood.set_best();
                 }
             } else {
-                self.neighborhood.undo_move();
+                self.neighborhood.reject();
                 iterations_since_accept += 1;
             }
 
