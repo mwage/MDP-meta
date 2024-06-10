@@ -26,17 +26,19 @@ impl NeighborhoodFunction for CoverTask {
             // Cover greedily
             if let Some(new_rm) = state.find_reg_maint_cover_greedy(res, time) {
                 state.add_regular_maintenance(res, new_rm);
-                change_tokens.push(ChangeToken::AddRM(res, time));
+                change_tokens.push(ChangeToken::AddRM(res, new_rm));
             }
         } else {
             // Cover randomly
+            // println!("{:?}", state);
             if let Some(new_rm) = state.find_reg_maint_cover_greedy(res, time) {
+                // println!("Try add at res {}: {}", res, new_rm);
                 state.add_regular_maintenance(res, new_rm);
-                change_tokens.push(ChangeToken::AddRM(res, time));
+                change_tokens.push(ChangeToken::AddRM(res, new_rm));
             }
         }
 
-        ((state.working_obj_val() - obj_prev) as f64, change_tokens)
+        ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens)
     }
 }
 

@@ -754,6 +754,7 @@ impl State {
         for (_, stamp) in self.maintenance_changes.range_mut(start_time..end_time) {
             stamp.count -= 1;
         }
+        // println!("removed at: start {}, end {}", start_time, end_time);
         self.maintenance_changes.get_mut(&start_time).unwrap().num_changed -= 1;
         self.maintenance_changes.get_mut(&end_time).unwrap().num_changed -= 1;
 

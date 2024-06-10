@@ -21,6 +21,10 @@ impl SimulatedAnnealing {
         }
     }
     
+    pub fn neighborhood(&self) -> &Neighborhood {
+        &self.neighborhood
+    }
+    
     fn decrease_temperature(&mut self) {
         self.temperature *= self.parameters.alpha
     }
@@ -39,11 +43,7 @@ impl SimulatedAnnealing {
         false
     }
 
-    pub fn extract(self) -> (Neighborhood, SAParameters) {
-        (self.neighborhood, self.parameters)
-    }
-    
-    pub fn solve(mut self) {
+    pub fn solve(&mut self) {
         let mut iterations = 0;
         let mut iterations_since_accept = 0;
         let mut iterations_since_improvement = 0;
@@ -54,6 +54,7 @@ impl SimulatedAnnealing {
             iterations_since_improvement += 1;
             iterations += 1;
             if self.accept(delta) {
+                // println!("Accept ({})", delta);
                 self.neighborhood.accept();
                 total_delta += delta;
                 iterations_since_accept = 0;
@@ -63,6 +64,7 @@ impl SimulatedAnnealing {
                     // self.neighborhood.set_best();
                 }
             } else {
+                // println!("Reject ({})", delta);
                 self.neighborhood.reject();
                 iterations_since_accept += 1;
             }
@@ -108,9 +110,9 @@ impl Default for SAParameters {
     fn default() -> Self {
         SAParameters {
             alpha: 0.99,
-            initial_temperature: 1000.0,
+            initial_temperature: 10000000.0,
             final_temperature: 0.0001,
-            timelimit: 1000*60*5
+            timelimit: 1000*60*10
         }
     }
 }

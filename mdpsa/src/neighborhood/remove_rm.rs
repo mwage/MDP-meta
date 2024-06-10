@@ -29,7 +29,7 @@ impl NeighborhoodFunction for RemoveRM {
             }
         }
 
-        ((state.working_obj_val() - obj_prev) as f64, change_tokens)
+        ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens)
     }
 }
 
