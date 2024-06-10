@@ -377,7 +377,7 @@ impl State {
         if new_uncovered.is_none() { return None; }  // No task uncovered
 
         // Cover the task
-        println!("Cover!");
+        // println!("Cover!");
         // println!("{:?}", self.uncovered);
         
         match self.find_reg_maint_cover_random(res, *new_uncovered.unwrap()) {
@@ -452,7 +452,7 @@ impl State {
     }
 
     // Add reg maintenance greedily at first suitable position
-    fn find_reg_maint_cover_greedy(&self, res: usize, time: usize) -> Option<usize> {
+    pub fn find_reg_maint_cover_greedy(&self, res: usize, time: usize) -> Option<usize> {
         let mut possible_start = cmp::max(time as isize - self.instance.time_regular() as isize - self.instance.duration_regular() as isize, 0) as usize;
         for (&job_finished, token) in self.jobs[res].range(possible_start..time) {
             let start = match token {
@@ -472,18 +472,18 @@ impl State {
     }
 
     // Add reg maintenance a random (but covering) position
-    fn find_reg_maint_cover_random(&self, res: usize, time: usize) -> Option<usize> {
+    pub fn find_reg_maint_cover_random(&self, res: usize, time: usize) -> Option<usize> {
         let first_possible_end = cmp::max(time as isize - self.instance.time_regular() as isize, self.instance.duration_regular() as isize) as usize;
-        println!("window: {}-{}", first_possible_end, time);
+        // println!("window: {}-{}", first_possible_end, time);
         let windows = self.get_all_suitable_windows_on_res(res, first_possible_end, time, self.instance.duration_regular());
         if windows.is_empty() {
             return None;
         }
         let mut rng = thread_rng();
-        println!("{:?}", windows);
+        // println!("{:?}", windows);
         let (left, right) = windows.choose(&mut rng).unwrap();
         let selected = rng.gen_range(*left..*right+1);
-        println!("res {}: {}/{} => {}", res, left, right, selected);
+        // println!("res {}: {}/{} => {}", res, left, right, selected);
         // println!("{:?}", self);
         
         Some(selected)

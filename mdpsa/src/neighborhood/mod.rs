@@ -3,6 +3,7 @@ mod move_mm;
 mod move_rm;
 mod move_rm_to_any;
 mod remove_rm;
+mod cover_task;
 
 use super::{State, Instance};
 
@@ -10,6 +11,7 @@ use move_mm::MoveMM;
 use move_rm::MoveRM;
 use move_rm_to_any::MoveRMToAny;
 use remove_rm::RemoveRM;
+use cover_task::CoverTask;
 
 pub use neighborhood::Neighborhood;
 

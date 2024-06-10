@@ -43,7 +43,6 @@ impl NeighborhoodFunction for MoveRM {
         // Repair a task that was uncovered due to move
         if self.repair { 
             if let Some(new_rm) = state.repair_after_move(res, time, new_time) {
-                println!("Add at {}", new_rm);
                 change_tokens.push(ChangeToken::AddRM(res, new_rm));
             }
         }
