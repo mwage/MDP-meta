@@ -475,7 +475,7 @@ impl State {
     pub fn find_reg_maint_cover_random(&self, res: usize, time: usize) -> Option<usize> {
         let first_possible_end = cmp::max(time as isize - self.instance.time_regular() as isize, self.instance.duration_regular() as isize) as usize;
         // println!("window: {}-{}", first_possible_end, time);
-        let windows = self.get_all_suitable_windows_on_res(res, first_possible_end, time, self.instance.duration_regular());
+        let windows = self.get_all_suitable_windows_on_res(res, first_possible_end, time, self.instance.duration_regular(), false);
         if windows.is_empty() {
             return None;
         }
@@ -490,9 +490,9 @@ impl State {
     }
 
     // Window to add job without need to remove anything
-    pub fn get_all_suitable_windows_on_res(&self, res: usize, window_start: usize, window_end: usize, length: usize) -> Vec<(usize, usize)> {
-        if window_start < length {
-            panic!("Requires end times => window_start >= length")
+    pub fn get_all_suitable_windows_on_res(&self, res: usize, window_start: usize, window_end: usize, length: usize, is_mm: bool) -> Vec<(usize, usize)> {
+        if window_start < length || (is_mm && length != self.instance.duration_major()) {
+            panic!("Requires end times => window_start >= length, or maj maint duration not correct")
         }
         let mut possible_windows = Vec::new();
         let mut prev = window_start - length;
@@ -526,7 +526,70 @@ impl State {
             }
         }
 
-        return possible_windows;
+        if !is_mm { return possible_windows; }
+
+        // println!("possible for res {}: {:?}", res, possible_windows);
+
+        // Check overlaps of MMs
+        let mut windows_for_mm = Vec::new();
+        for window in possible_windows.into_iter() {
+            let mut splits = vec![window];
+            while !splits.is_empty() {
+                let (mut left, mut right) = splits.pop().unwrap();
+                // println!("left={}, right={}", left, right);
+                let mut can_add = true;
+                for other_res in 0..self.instance.resources() {
+                    if other_res == res {
+                        continue;   // Skip self
+                    }
+                    let end = self.maj_maint_ends[other_res];
+                    // println!("res {}: end={}", other_res, end);
+                    if end <= left - length || end >= right + length {
+                        // println!("No overlap");
+                        continue;   // Not overlapping with window
+                    }
+                    // Overlap, case cannot fit MM between left and start of other_mm
+                    // println!("first: {}", end < left + 2 * length);
+                    if end < left + 2 * length {
+                        left = end + length;
+                        continue;
+                    }
+                    // println!("left={}, right={}", left, right);
+                    // Overlap, case cannot fit MM between right and end of other_mm
+                    // println!("second: {}", end > right - length);
+                    if end > right - length {
+                        right = end - length;
+                        continue;
+                    }
+                    // println!("left={}, right={}", left, right);
+                    // println!("third: {}", left > right || right - left < length);
+                    if left > right {
+                        can_add = false;
+                        break;  // Cannot fit MM in window
+                    }
+                    // println!("left={}, right={}", left, right);
+                    // Case that it is in the middle and we can fit a MM either to the left or to the right => need to split
+                    let leftwindow = (left, end-length);
+                    let rightwindow = (end, right);
+                    if leftwindow.0 <= leftwindow.1 {
+                        // println!("Add {:?}", leftwindow);
+                        splits.push(leftwindow);
+                    }
+                    if rightwindow.0 <= rightwindow.1 {
+                        // println!("Add {:?}", rightwindow);
+                        splits.push(rightwindow);
+                    }
+                    can_add = false;
+                    break;
+                }
+                
+                if can_add && right > left {
+                    windows_for_mm.push((left, right));
+                }
+            }
+        }
+
+        windows_for_mm
     }
 
     // (res, time)
@@ -551,9 +614,13 @@ impl State {
 
     // (res, time)
     pub fn get_rand_mm(&self) -> Option<(usize, usize)> {
-        let res = thread_rng().gen_range(0..self.instance.resources());
+        let num_assigned = self.assigned_maj_maint.iter().filter(|b| *b).count();
+        if num_assigned == 0 {
+            return None;
+        }
+        let res = self.assigned_maj_maint.iter().enumerate().filter(|(_, b)| *b).skip(thread_rng().gen_range(0..num_assigned)).next().unwrap().0;
         Some((res, self.maj_maint_ends[res]))
-    }
+    }    
 
     // (res, time)
     pub fn get_rand_unassigned_mm(&self) -> Option<(usize, usize)> {
@@ -561,7 +628,7 @@ impl State {
         if num_unassigned == 0 {
             return None;
         }
-        let res = self.assigned_tasks.iter().enumerate().filter(|(_, b)| !*b).skip(thread_rng().gen_range(0..self.instance.tasks().len())).next().unwrap().0;
+        let res = self.assigned_maj_maint.iter().enumerate().filter(|(_, b)| !*b).skip(thread_rng().gen_range(0..num_unassigned)).next().unwrap().0;
         Some((res, self.maj_maint_ends[res]))
     }
 

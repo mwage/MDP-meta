@@ -20,7 +20,7 @@ impl NeighborhoodFunction for MoveRMToAny {
 
         let (res, time) = rm.unwrap();
         let length = state.instance().duration_regular();
-        let windows = state.get_all_suitable_windows_on_res(res, length, state.instance().horizon(), length);
+        let windows = state.get_all_suitable_windows_on_res(res, length, state.instance().horizon(), length, false);
         // println!("{:?}", windows);
         if windows.is_empty() { return (0.0, change_tokens) } // Cannot move selected RM
 

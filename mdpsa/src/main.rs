@@ -23,8 +23,8 @@ fn main() {
     // println!("Start instance {}", instance_name);
     let mut neighborhood = Neighborhood::new(instance);
     // println!("Finished feasibility");
-    println!("Start: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
-    // println!("{:?}", neighborhood.state());
+    // println!("Start: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
+    // println!("{:?}", neighborhood.state().jobs());
     
     for i in 0..100000 {
         // println!("{:?}", neighborhood.state().jobs());
@@ -46,7 +46,7 @@ fn main() {
         // println!("---------------------------------------------------------------------------------------------");
         // println!("{:?}", neighborhood.state());
     }
-    println!("After: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
-    println!("{:?}", neighborhood.state().jobs());
+    // println!("After: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
+    // println!("{:?}", neighborhood.state().jobs());
 }
 }
