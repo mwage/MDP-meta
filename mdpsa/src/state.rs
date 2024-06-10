@@ -23,7 +23,6 @@ pub struct State {
     maj_maint_ends: Vec<usize>, // End times of all maj maintenances
     reg_maint_ends: Vec<BTreeSet<usize>>,   // End times of all regular maintenances on each resource
     task_ass: Vec<usize>,   // To which res a task is assigned to
-    num_reg_maint: Vec<usize>,  // Number of reg maintenances per resource
     maintenance_changes: BTreeMap<usize, ChangeTimestamp>, // Number of maintenences after the timestamp
     obj_value: usize,   // Obj value of instance (without penalties)
     penalty_value: usize,   // Current penalty value (including modifier)
@@ -46,7 +45,6 @@ impl State {
             maj_maint_ends: vec![0; res],
             reg_maint_ends: vec![BTreeSet::new(); res],
             task_ass,
-            num_reg_maint: vec![0; res],
             maintenance_changes: BTreeMap::new(),
             obj_value: 0, 
             penalty_value: 0,
@@ -87,7 +85,7 @@ impl State {
         let mut penalties = Vec::new();
         // Add major maintenances at random (non-overlapping) times
         for res in 0..self.instance.resources() {
-            self.add_major_maintenence(res, (res+1) * self.instance.duration_major());
+            self.add_major_maintenance(res, (res+1) * self.instance.duration_major());
         }
 
         // Assign tasks to a random (free) resource
@@ -159,20 +157,63 @@ impl State {
         self.penalty_value == 0
     }
 
+    pub fn increase_penalty_multi(&mut self) {
+        let old_multi = self.penalty_multi;
+        self.penalty_multi += 1;
+        self.penalty_value /= old_multi;
+        self.penalty_value *= self.penalty_multi;
+    }
+
+    pub fn calc_penalty_from_scratch(&self) -> usize {
+        let mut penalty = 0;
+        // Uncovered tasks
+        for res in 0..self.instance.resources() {
+            let mut cover_limit = self.instance.time_regular();
+            for (time, job) in self.jobs[res].iter() {
+                match job {
+                    JobToken::Task(id) => {
+                        if *time <= cover_limit {
+                            // Covered
+                            continue;
+                            }
+                        let task = &self.instance.tasks()[*id];
+                        penalty += PenaltyToken::RegMaintNotCovered(if task.start() > cover_limit {
+                            // Fully uncovered
+                            task.length()
+                        } else {
+                            // Partially covered
+                            task.end() - cover_limit
+                        }).to_penalty(&self.instance, self.penalty_multi);
+                    },
+                    _ => cover_limit = *time + self.instance.time_regular()
+                };
+            }
+        }
+        // TODO: Other penalties
+        penalty
+    }
+
     pub fn is_feasible(&self, requires_completeness: bool) -> bool {
         // All mandatory jobs assigned 
-        if requires_completeness && (!self.assigned_maj_maint.all() || !self.assigned_tasks.all() && !self.uncovered.iter().all(|x| x.is_empty())) { return false; }
+        if requires_completeness && (!self.assigned_maj_maint.all() || !self.assigned_tasks.all() && !self.uncovered.iter().all(|x| x.is_empty())) {
+            eprintln!("Not all jobs assigned, but mandatory enabled");
+            return false; 
+        }
 
         // Correct maint assignments
         for (i, time) in self.maj_maint_ends.iter().enumerate() {
             if self.jobs[i].get(time) != Some(&JobToken::MajMaint) {
+                eprintln!("maj maint incorrect assignment");
                 return false;
             }
         }
         // Maj maint overlaps
         for i in 0..self.instance.resources() {
             for j in i+1..self.instance.resources() {
-                if self.maj_maint_ends[i].abs_diff(self.maj_maint_ends[j]) < self.instance.duration_major() { return false; }
+                if self.maj_maint_ends[i].abs_diff(self.maj_maint_ends[j]) < self.instance.duration_major() {
+                    eprintln!("maj maint overlap");
+                    return false; 
+                }
             }
         }
         // No overlap + maint coverage + maj uniqueness + reg matching
@@ -185,25 +226,35 @@ impl State {
                 match job {
                     // Check maint assignments
                     JobToken::MajMaint => {
-                        if *time != self.maj_maint_ends[res] || difference < self.instance.duration_major() { return false; }
+                        if *time != self.maj_maint_ends[res] || difference < self.instance.duration_major() {
+                            eprintln!("maj maint incorrect assignment 2");
+                            return false; 
+                        }
                     },
                     JobToken::RegMaint => { 
-                        if !self.reg_maint_ends[res].contains(time) || difference < self.instance.duration_regular() { return false; }
+                        if !self.reg_maint_ends[res].contains(time) || difference < self.instance.duration_regular() {
+                            eprintln!("reg maint incorrect assignment in res {}, time {}, difference: {}", res, time, difference); 
+                            return false; 
+                        }
                     },
                     JobToken::Task(i) => {
-                        if tasks[*i] || difference < self.instance.tasks()[*i].length() { return false; }   // Double assignment or unassigned occurring
+                        if tasks[*i] || difference < self.instance.tasks()[*i].length() {
+                            eprintln!("Double assignment or unassigned occurring");
+                            return false; 
+                        }   
                         tasks.set(*i, true);
 
                         // Check coverage + uncovered assignment
                         if *time > self.instance.time_regular() && self.has_maint_covered(res, *time).is_none() {
-                            if requires_completeness || !self.uncovered[res].contains(time) { return false; }
+                            if requires_completeness || !self.uncovered[res].contains(time) {
+                                eprintln!("error in coverage and uncovered assignments");
+                                return false; 
+                            }
                         }
                     }
                 }
                 previous = *time;
             }
-            // Check reg maint assignments
-            if self.reg_maint_ends[res].len() != self.num_reg_maint[res] { return false; }
         }
 
         true
@@ -259,31 +310,17 @@ impl State {
         self.penalty_value += PenaltyToken::Task(task_idx).to_penalty(&self.instance, self.penalty_multi);
     }
 
-    pub fn add_major_maintenence(&mut self, res: usize, end_time: usize) {
+    pub fn add_major_maintenance(&mut self, res: usize, end_time: usize) {
         let start_time = end_time - self.instance.duration_major();
         self.assigned_maj_maint.set(res, true);
         self.maj_maint_ends[res] = end_time;
         self.jobs[res].insert(end_time, JobToken::MajMaint);
         
         self.update_changes_maint_added(start_time, end_time, res);
+        self.penalty_value -= PenaltyToken::MajMaint.to_penalty(&self.instance, self.penalty_multi);
     }
 
-    pub fn repair_after_move(&mut self, res: usize, prev_time: usize, new_time: usize) {
-        // Repair if a task was (partly) uncovered from move, but only if it was completely covered before
-        if new_time >= prev_time { return; }    // Not possible to uncover if moving forward
-        // println!("try repair!");
-        let new_uncovered = self.uncovered[res].range(new_time+self.instance.time_regular()..prev_time+self.instance.time_regular()+1).next_back();
-        if new_uncovered.is_none() { return; }  // No task uncovered
-
-        // Cover the task
-        // println!("Cover!");
-        // println!("{:?}", self.uncovered);
-        if let Some(new_rm) = self.find_reg_maint_cover_random(res, *new_uncovered.unwrap()) {
-            self.add_regular_maintenance(res, new_rm);
-        }
-    }
-
-    pub fn remove_major_maintenence(&mut self, res: usize) {
+    pub fn remove_major_maintenance(&mut self, res: usize) {
         let end_time = self.maj_maint_ends[res];
         let start_time = end_time - self.instance.duration_major();
         self.assigned_maj_maint.set(res, false);
@@ -291,12 +328,13 @@ impl State {
         self.jobs[res].remove(&end_time);
 
         self.update_changes_maint_removed(start_time, end_time, res);
+
+        self.penalty_value += PenaltyToken::MajMaint.to_penalty(&self.instance, self.penalty_multi);
     }
 
     pub fn add_regular_maintenance(&mut self, res: usize, end_time: usize) {
         let start_time = end_time - self.instance.duration_regular();
         self.reg_maint_ends[res].insert(end_time);
-        self.num_reg_maint[res] += 1;
         self.jobs[res].insert(end_time, JobToken::RegMaint);
 
         self.update_changes_maint_added(start_time, end_time, res);
@@ -305,10 +343,70 @@ impl State {
     pub fn remove_regular_maintenance(&mut self, res: usize, end_time: usize) {
         let start_time = end_time - self.instance.duration_regular();
         self.reg_maint_ends[res].remove(&end_time);
-        self.num_reg_maint[res] -= 1;
         self.jobs[res].remove(&end_time);
 
         self.update_changes_maint_removed(start_time, end_time, res);
+    }
+    
+    // TODO: Consider adding previously partially covered as well (increase range)
+    pub fn repair_after_move(&mut self, res: usize, prev_time: usize, new_time: usize) -> Option<usize> {
+        // Repair if a task was (partly) uncovered from move, but only if it was completely covered before
+        if new_time >= prev_time { return None; }    // Not possible to uncover if moving forward
+        // println!("try repair!");
+        let new_uncovered = self.uncovered[res].range(new_time+self.instance.time_regular()..prev_time+self.instance.time_regular()+1).next_back();
+        if new_uncovered.is_none() { return None; }  // No task uncovered
+
+        // Cover the task
+        // println!("Cover!");
+        // println!("{:?}", self.uncovered);
+        
+        match self.find_reg_maint_cover_random(res, *new_uncovered.unwrap()) {
+            Some(new_rm) => {
+                self.add_regular_maintenance(res, new_rm);
+                return Some(new_rm);
+            },
+            None => return None
+        };
+    }
+
+    // TODO: Consider adding previously partially covered as well (increase range)
+    pub fn repair_after_move_any(&mut self, res: usize, prev_time: usize) -> Option<usize> {
+        // Repair if a task was (partly) uncovered from move, but only if it was completely covered before
+        // println!("try repair!");
+        let new_uncovered = self.uncovered[res].range(prev_time..prev_time+self.instance.time_regular()+1).next_back();
+        if new_uncovered.is_none() { return None; }  // No task uncovered
+
+        // Cover the task
+        println!("Cover!");
+        // println!("{:?}", self.uncovered);
+        
+        match self.find_reg_maint_cover_random(res, *new_uncovered.unwrap()) {
+            Some(new_rm) => {
+                self.add_regular_maintenance(res, new_rm);
+                return Some(new_rm);
+            },
+            None => return None
+        };
+    }
+
+    // TODO: Consider adding previously partially covered as well (increase range)
+    pub fn repair_after_remove(&mut self, res: usize, prev_time: usize) -> Option<usize> {
+        // Repair if a task was (partly) uncovered from removal, but only if it was completely covered before
+        // println!("try repair!");
+        let new_uncovered = self.uncovered[res].range(prev_time..prev_time+self.instance.time_regular()+1).next_back();
+        if new_uncovered.is_none() { return None; }  // No task uncovered
+
+        // Cover the task
+        // println!("Cover!");
+        // println!("{:?}", self.uncovered);
+        
+        match self.find_reg_maint_cover_random(res, *new_uncovered.unwrap()) {
+            Some(new_rm) => {
+                self.add_regular_maintenance(res, new_rm);
+                return Some(new_rm);
+            },
+            None => return None
+        };
     }
 
     // Calculate upper and lower bounds for end time (possibly to freely move maintenance between these two timeframes)
@@ -343,6 +441,9 @@ impl State {
 
     // If the task is covered by a maintenance, returns Some(maint time), where maint time is the end time of the closest maint one that coveres the task
     fn has_maint_covered(&self, res: usize, time: usize) -> Option<usize> {
+        if time <= self.instance.time_regular() {
+            return Some(0);
+        }
         let limit = time - self.instance.time_regular();
         match self.jobs[res].range(limit..time).find(|x| x.1 == &JobToken::MajMaint || x.1 == &JobToken::RegMaint) {
             Some(x) => Some(*x.0),
@@ -351,7 +452,7 @@ impl State {
     }
 
     // Add reg maintenance greedily at first suitable position
-    pub fn find_reg_maint_cover_greedy(&self, res: usize, time: usize) -> Option<usize> {
+    fn find_reg_maint_cover_greedy(&self, res: usize, time: usize) -> Option<usize> {
         let mut possible_start = cmp::max(time as isize - self.instance.time_regular() as isize - self.instance.duration_regular() as isize, 0) as usize;
         for (&job_finished, token) in self.jobs[res].range(possible_start..time) {
             let start = match token {
@@ -371,57 +472,131 @@ impl State {
     }
 
     // Add reg maintenance a random (but covering) position
-    pub fn find_reg_maint_cover_random(&self, res: usize, time: usize) -> Option<usize> {
-        // TODO: implement
-        let mut possible_start = cmp::max(time as isize - self.instance.time_regular() as isize - self.instance.duration_regular() as isize, 0) as usize;
-        for (&job_finished, token) in self.jobs[res].range(possible_start..time) {
-            let start = match token {
-                JobToken::MajMaint => job_finished - self.instance.duration_major(),
-                JobToken::RegMaint => job_finished - self.instance.duration_regular(),
-                JobToken::Task(i) => self.instance.tasks()[*i].start(),
+    fn find_reg_maint_cover_random(&self, res: usize, time: usize) -> Option<usize> {
+        let first_possible_end = cmp::max(time as isize - self.instance.time_regular() as isize, self.instance.duration_regular() as isize) as usize;
+        println!("window: {}-{}", first_possible_end, time);
+        let windows = self.get_all_suitable_windows_on_res(res, first_possible_end, time, self.instance.duration_regular());
+        if windows.is_empty() {
+            return None;
+        }
+        let mut rng = thread_rng();
+        println!("{:?}", windows);
+        let (left, right) = windows.choose(&mut rng).unwrap();
+        let selected = rng.gen_range(*left..*right+1);
+        println!("res {}: {}/{} => {}", res, left, right, selected);
+        // println!("{:?}", self);
+        
+        Some(selected)
+    }
+
+    // Window to add job without need to remove anything
+    pub fn get_all_suitable_windows_on_res(&self, res: usize, window_start: usize, window_end: usize, length: usize) -> Vec<(usize, usize)> {
+        if window_start < length {
+            panic!("Requires end times => window_start >= length")
+        }
+        let mut possible_windows = Vec::new();
+        let mut prev = window_start - length;
+        let mut finished_interval = false;
+        for (end, job) in self.jobs[res].range(window_start - length..) {
+            if *end < window_start - length { continue; }    // Need to check tasks that would overlap if end is set to < window_start-length
+            let start = match job {
+                JobToken::MajMaint => *end - self.instance.duration_major(),
+                JobToken::RegMaint => *end - self.instance.duration_regular(),
+                JobToken::Task(id) => self.instance.tasks()[*id].start()
             };
-            if start < possible_start || start - possible_start < self.instance.duration_regular() {
-                possible_start = job_finished;
-                continue;
+            // println!("res={}, start={}, prev={}, add={}", res, start, prev, start >= prev && start - prev >= length);
+            if start >= prev && start - prev >= length {    // start can be < prev if prev initialized to length
+                // Suitable window found
+                possible_windows.push((prev+length, start));
             }
-            // Found a suitable slot
-            return Some(possible_start + self.instance.duration_regular())
+            prev = *end;
+            if prev >= window_end {
+                finished_interval = true;
+                break;
+            }
+        }
+        if !finished_interval {
+            // Need to check window after last job until window_end
+            let last_job_end = match self.jobs[res].last_key_value() {
+                Some((i, _)) => *i,
+                None => length
+            };
+            if window_end - last_job_end >= length {
+                possible_windows.push((last_job_end, window_end));
+            }
         }
 
-        // None
-
-        unimplemented!()
+        return possible_windows;
     }
 
     // (res, time)
     pub fn get_rand_rm(&self) -> Option<(usize, usize)> {
-        let mut rng = thread_rng();
-        if self.reg_maint_ends.iter().all(|x| x.is_empty()) {
+        let num_rm = self.reg_maint_ends.iter().flatten().count();
+        if num_rm == 0 {
             return None;
         }
-        // TODO: Improve: select from all equally weighted instead of loop
-        loop {
-            let res = rng.gen_range(0..self.instance.resources());
-            if self.reg_maint_ends[res].is_empty() { continue; }
-
-            return Some((res, *self.reg_maint_ends[res].iter().skip(rng.gen_range(0..self.reg_maint_ends[res].len())).next().unwrap()))
+        let rm_idx = thread_rng().gen_range(0..num_rm);
+        let mut counter = 0;
+        for res in 0..self.instance.resources() {
+            for rm in self.reg_maint_ends[res].iter() {
+                if counter == rm_idx {
+                    return Some((res, *rm));
+                }
+                counter += 1;
+            }
         }
+
+        panic!("Should always find the index")
     }
 
-    // res
-    pub fn get_rand_mm(&self) -> usize {
-        let mut rng = thread_rng();
-        rng.gen_range(0..self.instance.resources())
+    // (res, time)
+    pub fn get_rand_mm(&self) -> Option<(usize, usize)> {
+        let res = thread_rng().gen_range(0..self.instance.resources());
+        Some((res, self.maj_maint_ends[res]))
+    }
+
+    // (res, time)
+    pub fn get_rand_unassigned_mm(&self) -> Option<(usize, usize)> {
+        let num_unassigned = self.assigned_maj_maint.iter().filter(|b| !*b).count();
+        if num_unassigned == 0 {
+            return None;
+        }
+        let res = self.assigned_tasks.iter().enumerate().filter(|(_, b)| !*b).skip(thread_rng().gen_range(0..self.instance.tasks().len())).next().unwrap().0;
+        Some((res, self.maj_maint_ends[res]))
     }
 
     // taskid
-    pub fn get_rand_task(&self) -> usize {
-        let mut rng = thread_rng();
-        rng.gen_range(0..self.instance.tasks().len())
+    pub fn get_rand_unassigned_task(&self) -> Option<usize> {
+        let num_unassigned = self.assigned_tasks.iter().filter(|b| !*b).count();
+        if num_unassigned == 0 {
+            return None;
+        }
+        Some(self.assigned_tasks.iter().enumerate().filter(|(_, b)| !*b).skip(thread_rng().gen_range(0..self.instance.tasks().len())).next().unwrap().0)
+    }
+
+    // (res, time)
+    pub fn get_rand_uncovered_task(&self) -> Option<(usize, usize)> {
+        let num_uncovered = self.uncovered.iter().flatten().count();
+        if num_uncovered == 0 {
+            return None;
+        }
+        let idx = thread_rng().gen_range(0..num_uncovered);
+        let mut counter = 0;
+        for res in 0..self.instance.resources() {
+            for time in self.uncovered[res].iter() {
+                if counter == idx {
+                    return Some((res, *time));
+                }
+                counter += 1;
+            }
+        }
+
+        panic!("Should always find the index")
     }
 
     // Updates objective values, maintenance changes, uncovered and penalty when a maintenance is added
     fn update_changes_maint_added(&mut self, start_time: usize, end_time: usize, res: usize) {
+        // println!("------------------------Add Maint-------------------------");
         // Update maintenance changes
         let num_before_start = match self.maintenance_changes.range(..start_time).next_back() {
             Some(x) => x.1.count,
@@ -451,21 +626,29 @@ impl State {
         // Update uncovered and penalties
         // Compute all tasks that are uncovered and overlap with cover limit of new maintenance
         let cover_limit = end_time + self.instance.time_regular();
+        // println!("coverlimit = {}", cover_limit);
         let mut affected_tasks = Vec::new();
-        // println!("{:?}", self.uncovered);
-        for time in self.uncovered[res].range(end_time..) {
-            // println!("Update task {}", *time);
-            let task = self.jobs[res].get(time).unwrap();
-            match task {
+        // println!("uncovered: {:?}", self.uncovered);
+        for (time, job) in self.jobs[res].range(end_time+1..) {
+            match job {
                 JobToken::Task(id) => {
-                    // println!("Add task {}", *time);
-                    affected_tasks.push((*time, *id)); 
+                    // println!("check task {} ({})", id, time);
+                    if !self.uncovered[res].contains(time) {
+                        // Task covered
+                        continue;
+                    }
+                    if self.instance.tasks()[*id].start() < cover_limit {
+                        // println!("Add task {}", *time);
+                        affected_tasks.push((*time, *id)); 
+                    } else {
+                        // Break after first uncovered task that exceeds cover limit
+                        break;
+                    }
                 },
-                _ => panic!("Maintenance assigned to task???")
-            }
-            if *time > cover_limit {
-                // Break after first uncovered task that exceeds cover limit
-                break; 
+                _ => {
+                    // Maintenance => stop, rest is covered
+                    break;
+                }
             }
         }
         // Update all tasks that were uncovered and are effected
@@ -475,6 +658,7 @@ impl State {
             Some((t, _)) => *t,
             None => 0
         } + self.instance.time_regular();
+        // println!("prev_limit: {}", prev_maint_limit);
         for (time, task_id) in affected_tasks.iter() {
             let task = &self.instance.tasks()[*task_id];
             let covered_by_prev = if task.start() >= prev_maint_limit {
@@ -488,24 +672,23 @@ impl State {
                 cover_limit - task.start()
             } - covered_by_prev;
             
-            // println!("Remove {}", PenaltyToken::RegMaintNotCovered(newly_covered_time).to_penalty(&self.instance, self.penalty_multi));
+            // println!("Remove {} for task {}({})", PenaltyToken::RegMaintNotCovered(newly_covered_time).to_penalty(&self.instance, self.penalty_multi), task_id, time);
             self.penalty_value -= PenaltyToken::RegMaintNotCovered(newly_covered_time).to_penalty(&self.instance, self.penalty_multi);
             if *time <= cover_limit {
                 self.uncovered[res].remove(time);
             }
         }
-        // TODO: Check all corner cases for uncovered
     }
 
     // Updates objective values, maintenance changes, uncovered and penalty when a maintenance is removed
     fn update_changes_maint_removed(&mut self, start_time: usize, end_time: usize, res: usize) {
+        // println!("---------------------Remove Maint-------------------------");
         // Update maintenance changes
         for (_, stamp) in self.maintenance_changes.range_mut(start_time..end_time) {
             stamp.count -= 1;
         }
         self.maintenance_changes.get_mut(&start_time).unwrap().num_changed -= 1;
         self.maintenance_changes.get_mut(&end_time).unwrap().num_changed -= 1;
-        // TODO: Can get None?
 
         // Update obj valuee
         let mut prev = (start_time, *self.maintenance_changes.get(&start_time).unwrap());
@@ -527,13 +710,27 @@ impl State {
         // Update uncovered and penalties
         // Compute all tasks that might now be uncovered and overlap with cover limit of new maintenance
         let cover_limit = end_time + self.instance.time_regular();
+        // println!("coverlimit={}", cover_limit);
         let mut affected_tasks = Vec::new();
         for (time, job) in self.jobs[res].range(end_time..) {
-            if self.has_maint_covered(res, *time).is_some() { continue; }   // Is covered by another maintenance
+            // println!("time={}", time);
             match job {
-                JobToken::Task(id) => { affected_tasks.push((*time, *id)); },
-                _ => break  // Anything after this maintenance wasn't covered by the removed one
+                JobToken::Task(id) => {
+                    if self.has_maint_covered(res, *time).is_some() { continue; }   // Is covered by another maintenance
+                    if self.instance.tasks()[*id].start() < cover_limit {
+                        // println!("Add job {} ({})", id, time);
+                        affected_tasks.push((*time, *id)); 
+                    } else {
+                        // Break after first uncovered task that exceeds cover limit
+                        break;
+                    }
+                },
+                _ => {
+                    // println!("Term due to maint at {}", time);
+                    break; 
+                }  // Anything after this maintenance wasn't covered by the removed one
             }
+            
             if *time > cover_limit {
                 // Break after first uncovered task that exceeds cover limit
                 break; 
