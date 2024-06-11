@@ -2,7 +2,7 @@ use crate::instance::Instance;
 
 use super::State;
 use super::*;
-use rand::{Rng, prelude::*};
+use rand::prelude::*;
 
 
 pub struct Neighborhood {
@@ -54,7 +54,6 @@ impl Neighborhood {
             Box::new(SwapMM::new(true)),
         ];
         let selected = neighborhoods.choose(&mut thread_rng()).unwrap();
-        // println!("-------------------------------\n{}", selected.to_string());
         let (delta, tokens) = selected.get_neighbor(&mut self.state);
         self.last_changes = tokens;
         
@@ -82,39 +81,12 @@ impl Neighborhood {
                 ChangeToken::RemoveMM(res, time) => self.state.add_major_maintenance(*res, *time),
                 ChangeToken::AddTask(task_id) => self.state.remove_task(*task_id),
                 ChangeToken::RemoveTask(res, task_id) => self.state.add_task(*res, *task_id),
-                // ChangeToken::AddRM(res, new_rm) => self.state.remove_regular_maintenance(*res, *new_rm),
             }
         }
         self.last_changes = Vec::new()
     }
 
-    pub fn increase_penalty_multi(&mut self) {
-        self.state.increase_penalty_multi();
-    }
-    
-    fn instance(&self) -> &Instance {
-        &self.state.instance()
-    }
-
-    // remove a regular maintenance 
-    fn remove_rm(&mut self) -> f64 {
-        unimplemented!()
-    }
-
-    // add a regular maintenance 
-    fn cover_task(&mut self) -> f64 {
-        unimplemented!()
-    }
-
-    // Move a major maintenance within boundries between neighbors and other MMs
-    fn move_mm(&mut self) -> f64 {
-        unimplemented!()
-    }
-
-    // Swap MM between two resources, unassign and try repair tasks
-    fn swap_mm(&mut self) -> f64 {
-        unimplemented!()
-    }
-
-
+    // pub fn increase_penalty_multi(&mut self) {
+    //     self.state.increase_penalty_multi();
+    // }
 }

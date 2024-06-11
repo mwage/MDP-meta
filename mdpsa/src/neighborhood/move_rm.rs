@@ -26,16 +26,11 @@ impl NeighborhoodFunction for MoveRM {
         if left == right { return (0.0, change_tokens) } // Cannot move selected RM
 
         // Get new random time and add RM
-        // println!("RM: {}/{}", left, right);
-        // if left > right {
-        //     println!("{:?}", state);
-        // }
         let left = cmp::max(left, time-self.max_move);
         let right = cmp::min(right, time+self.max_move);
         let new_time = thread_rng().gen_range(left..right+1);
         
         // Replace reg maintenance
-        // println!("RM: {}->{}", time, new_time);
         state.remove_regular_maintenance(res, time);
         state.add_regular_maintenance(res, new_time);
         change_tokens.push(ChangeToken::MovedRM(res, time, new_time));
@@ -43,9 +38,6 @@ impl NeighborhoodFunction for MoveRM {
         // Repair a task that was uncovered due to move
         if self.repair { 
             change_tokens.append(&mut state.repair());
-            // if let Some(new_rm) = state.repair_after_move(res, time, new_time) {
-            //     change_tokens.push(ChangeToken::AddRM(res, new_rm));
-            // }
         }
 
         ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens)

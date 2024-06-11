@@ -1,5 +1,4 @@
 use super::*;
-use rand::{Rng, prelude::*};
 
 pub struct MoveMMToAny {
     repair: bool
@@ -23,7 +22,6 @@ impl NeighborhoodFunction for MoveMMToAny {
         if new_time.is_none() { return (0.0, change_tokens) }
 
         // Replace reg maintenance
-        // println!("MM: res {}: {}->{}", res, time, new_time);
         state.remove_major_maintenance(res);
         state.add_major_maintenance(res, new_time.unwrap());
         change_tokens.push(ChangeToken::MovedMM(res, time));
@@ -31,9 +29,6 @@ impl NeighborhoodFunction for MoveMMToAny {
         // Repair a task that was uncovered due to move
         if self.repair {
             change_tokens.append(&mut state.repair());
-            // if let Some(new_rm) = state.repair_after_move_any(res, time) {
-            //     change_tokens.push(ChangeToken::AddRM(res, new_rm));
-            // }
         }
 
         ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens)

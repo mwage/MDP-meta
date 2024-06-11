@@ -3,7 +3,10 @@ mod state;
 mod simulated_annealing;
 mod neighborhood;
 
-use std::fs;
+use std::{fs, time::Instant};
+
+use crossbeam_utils::thread;
+
 
 use instance::Instance;
 use neighborhood::Neighborhood;
@@ -12,96 +15,113 @@ use state::State;
 
 
 fn main() {
-    // for path in fs::read_dir("./instances").unwrap() {
-    //     let instance_name = path.unwrap().path().to_str().unwrap().to_string();
-    //     let instance = Instance::new_from_file(&instance_name);
-    //     let instance_name = instance_name.split("\\").last().unwrap().split(".").next().unwrap();
-    // }
+    println!("instance, min, avg, num_feasible, iterations, iterations_since_accept, iterations_since_improvement, runtime");
+    for path in fs::read_dir("./instances").unwrap() {
+        // let instance = Instance::new_from_file("./instances/mdp-3-7-5.json");
 
-    let runs = 1;
+        let instance_name = path.unwrap().path().to_str().unwrap().to_string();
+        let instance = Instance::new_from_file(&instance_name);
+        let instance_name = instance_name.split("\\").last().unwrap().split(".").next().unwrap();
+        let results = run_multithreaded(instance, 10);
+        println!("{}", results_to_string(results, &instance_name));
+    }
+}
 
-    let mut counter = 0;
-    let mut best_obj = usize::MAX;
-    let mut total_working = 0;
-    let mut total_feasible = 0;
-    let mut total_iterations_since_accept = 0;
-    let mut total_iterations_since_improvement = 0;
-    for _ in 0..runs {
-            
-        let instance = Instance::new_from_file("./instances/mdp-3-7-5.json");
-        let instance_name = "mdp-3-7-5".to_string();
-
-
-        let mut sa = SimulatedAnnealing::new(Neighborhood::new(instance), SAParameters::default());
-        sa.set_iterations(1000000);
-        println!("Start: {} feasible: {} with {}({})", instance_name, sa.neighborhood().state().is_feasible(false), sa.neighborhood().state().obj_value(), sa.neighborhood().state().working_obj_val() - sa.neighborhood().state().obj_value());
-        // println!("{:?}",sa.neighborhood().state());
-        let (_, since_accept, since_impr) = sa.solve();
-        total_iterations_since_accept += since_accept;
-        total_iterations_since_improvement += since_impr;
-
-        // Update stats
-        total_working += sa.neighborhood().state().working_obj_val();
-        let best = sa.get_best();
-        if !best.is_none() { 
-           // Feasible found
-           let (obj, state) = best.as_ref().unwrap();        
-           counter += 1;
-           total_feasible += *obj;
-           if *obj < best_obj {
-               best_obj = *obj;
-           }
+fn run_multithreaded(instance: Instance, runs: usize) -> Vec<Result> {
+    thread::scope(|s| {
+        let mut handles = Vec::new();
+        for _ in 0..runs {
+            let instance_clone = instance.clone();
+            handles.push(s.spawn(move |_| {
+                run_instance(instance_clone, 1*10*1000)
+            }));
         }
+        let mut results = Vec::new();
+        for handle in handles.into_iter() {
+            results.push(handle.join().unwrap());
+        }
+        results
+    }).unwrap()
+}
 
-        let state = sa.neighborhood().state();
-        println!("After: {} feasible: {} with {}({})", instance_name, state.is_feasible(false), state.obj_value(), state.working_obj_val() - state.obj_value());
-        println!("{:?}", state);
 
+fn run_instance(instance: Instance, timeout: usize) -> Result {
+    let test_iterations = 1000;
+    let mut sa = SimulatedAnnealing::new(Neighborhood::new(instance), SAParameters::default());
+    // Estimate iterations for timeout
+    sa.set_iterations(test_iterations);
+    let timer = Instant::now();
+    let (iterations, iterations_since_accept, iterations_since_improvement) = sa.solve();
+    let prep_time = Instant::now().duration_since(timer).as_millis() as usize;
+    if prep_time > timeout {
+        // timelimit already used up
+        return Result::new(sa.get_best().clone(), iterations, iterations_since_accept, iterations_since_improvement, Instant::now().duration_since(timer).as_secs() as usize);
+    }
+    let iterations = timeout / prep_time * test_iterations;
+    sa.set_iterations(iterations);
+    sa.reset();
 
-        // eprintln!("{}", obj);
+    // Solve instance
+    let timer = Instant::now();
+    let (iterations, iterations_since_accept, iterations_since_improvement) = sa.solve();
 
+    Result::new(sa.get_best().clone(), iterations, iterations_since_accept, iterations_since_improvement, Instant::now().duration_since(timer).as_secs() as usize)
+}
 
-// //     // println!("Start instance {}", instance_name);
-//     let mut neighborhood = Neighborhood::new(instance);
-// //     // println!("Finished feasibility");
-//     // println!("Start: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
-// //     // println!("{:?}", neighborhood.state().jobs());
+fn results_to_string(results: Vec<Result>, instance: &str) -> String {
+    let num_feasible = results.iter().filter(|res| res.is_feasible()).count();
+    let iterations = results.iter().fold(0, |acc, res| acc + res.iterations) / results.len();
+    let iterations_since_accept = results.iter().fold(0, |acc, res| acc + res.iterations_since_accept()) / results.len();
+    let iterations_since_improvement = results.iter().fold(0, |acc, res| acc + res.iterations_since_improvement()) / results.len();
+    let runtime = results.iter().fold(0, |acc, res| acc + res.runtime()) / results.len();
+
+    if num_feasible == 0 {
+        return format!("{}, {}, {}, {}, {}, {}, {}, {}", instance, "-", "-", num_feasible, iterations, iterations_since_accept, iterations_since_improvement, runtime);
+    }
+    let obj_vals = results.iter().filter(|res| res.is_feasible()).map(|res| res.obj_val().unwrap()).collect::<Vec<usize>>();
+    let min = obj_vals.iter().min().unwrap();
+    let avg = obj_vals.iter().fold(0, |acc, time| acc + *time) / num_feasible;
     
-//     for i in 0..100000 {
-//         // println!("{:?}", neighborhood.state().jobs());
-//         // for res in 0..neighborhood.state().instance().resources() {
-//         //     let length = neighborhood.state().instance().duration_major();
-//         //     println!("{:?}", neighborhood.state().get_all_suitable_windows_on_res(res, length, neighborhood.state().instance().horizon(), length));
-//         // }
+    format!("{}, {}, {}, {}, {}, {}, {}, {}", instance, min, avg, num_feasible, iterations, iterations_since_accept, iterations_since_improvement, runtime)
+}
 
-//         // println!("{:?}", neighborhood.state().jobs());
-//         neighborhood.get_next();
-//         // println!("{:?}", neighborhood.state().uncovered());
-//         // neighborhood.reject();
-//         let working_penalty = neighborhood.state().working_obj_val() - neighborhood.state().obj_value();
-//         let actual_penalty = neighborhood.state().calc_penalty_from_scratch();
-//         // println!("{}: {} feasible: {} with {}({})", i, instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), working_penalty);
-        
-//         if working_penalty != actual_penalty {
-//             println!("Penalties not matching: working: {}, actual: {}, diff = {}", working_penalty, actual_penalty, working_penalty.abs_diff(actual_penalty));
-//             println!("{:?}", neighborhood.state());
-//             panic!("Penalties wrong");
-//         }
-        
-//         if !neighborhood.state().is_feasible(false) {
-//             println!("Infeasible assignments!");
-//             println!("{:?}", neighborhood.state());
-//             panic!("Infeasible");
-//         }        
-//         // println!("---------------------------------------------------------------------------------------------");
-//         // println!("{:?}", neighborhood.state());
-//     }
+pub struct Result {
+    best: Option<(usize, State)>,
+    iterations: usize,
+    iterations_since_accept: usize,
+    iterations_since_improvement: usize,
+    runtime: usize
+}
 
-//     println!("After: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
-//     println!("{:?}", neighborhood.state().jobs());
-
-
+impl Result {
+    pub fn new(best: Option<(usize, State)>, iterations: usize, iterations_since_accept: usize, iterations_since_improvement: usize, runtime: usize) -> Self {
+        Result { best, iterations, iterations_since_accept, iterations_since_improvement, runtime }
     }
 
-    println!("{}, best: {}, avg: {}, avg working: {}, since acc: {}, since impr: {}", counter, best_obj, total_feasible as f64 / counter as f64, total_working as f64 / runs as f64, total_iterations_since_accept as f64 / runs as f64, total_iterations_since_improvement as f64 / runs as f64);
+    pub fn obj_val(&self) -> Option<usize> {
+        match self.best {
+            Some((obj_val, _)) => Some(obj_val),
+            None => None
+        }
+    }
+
+    pub fn is_feasible(&self) -> bool {
+        self.best.is_some()
+    }
+
+    pub fn iterations(&self) -> usize {
+        self.iterations
+    }
+
+    pub fn iterations_since_improvement(&self) -> usize {
+        self.iterations_since_improvement
+    }
+
+    pub fn iterations_since_accept(&self) -> usize {
+        self.iterations_since_accept
+    }
+
+    pub fn runtime(&self) -> usize {
+        self.runtime
+    }
 }

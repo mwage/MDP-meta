@@ -31,7 +31,6 @@ impl NeighborhoodFunction for MoveMM {
         let new_time = thread_rng().gen_range(left..right+1);
 
         // Replace maj maintenance
-        // println!("MM: {}->{}", time, new_time);
         state.remove_major_maintenance(res);
         state.add_major_maintenance(res, new_time);
         change_tokens.push(ChangeToken::MovedMM(res, time));
@@ -39,9 +38,6 @@ impl NeighborhoodFunction for MoveMM {
         // Repair a task that was uncovered due to move
         if self.repair {
             change_tokens.append(&mut state.repair());
-            // if let Some(new_rm) = state.repair_after_move(res, time, new_time) {
-            //     change_tokens.push(ChangeToken::AddRM(res, new_rm));
-            // }
         }
 
         ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens)

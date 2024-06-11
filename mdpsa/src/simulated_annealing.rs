@@ -34,9 +34,13 @@ impl SimulatedAnnealing {
     pub fn get_best(&self) -> &Option<(usize, State)> {
         &self.best_feasible
     }
+
+    pub fn reset(&mut self) {
+        self.temperature = self.parameters.initial_temperature();
+    }
     
     fn decrease_temperature(&mut self) {
-        self.temperature *= self.parameters.alpha
+        self.temperature *= self.parameters.alpha()
     }
 
     fn accept(&self, delta: f64) -> bool {
@@ -65,14 +69,12 @@ impl SimulatedAnnealing {
             iterations_since_improvement += 1;
             iterations += 1;
             if self.accept(delta) {
-                // println!("Accept ({})", delta);
                 self.neighborhood.accept();
                 if delta != 0.0 {
                     iterations_since_accept = 0;
                 }
                 let obj_val = self.neighborhood.state().working_obj_val();
                 if obj_val < best_obj {
-                    println!("{}: Improved to {} ({})", iterations, obj_val, best_obj);
                     best_obj = obj_val;
                     iterations_since_improvement = 0;
                 }
@@ -89,20 +91,15 @@ impl SimulatedAnnealing {
                     }
                 }
             } else {
-                // println!("Reject ({})", delta);
                 self.neighborhood.reject();
                 iterations_since_accept += 1;
             }
 
             self.decrease_temperature();
-            if iterations % (self.parameters.iterations() / self.parameters.max_penalty) == 0 {
-                // self.neighborhood.increase_penalty_multi();
-                println!("Increased penalty to {} at t-{} with {}({})", self.neighborhood.state().penalty_multi(), self.temperature, self.neighborhood.state().obj_value(), self.neighborhood.state().working_obj_val() - self.neighborhood.state().obj_value());
-                // println!("increased penalty to {}", self.neighborhood.state().penalty_multi())
-            }
+            // if iterations % (self.parameters.iterations() / self.parameters.max_penalty) == 0 {
+            //     self.neighborhood.increase_penalty_multi();
+            // }
         }
-
-        // eprintln!("{} iterations, since acc: {}, since impr: {}", iterations, iterations_since_accept, iterations_since_improvement);
 
         (iterations, iterations_since_accept, iterations_since_improvement)
     }
@@ -112,14 +109,13 @@ pub struct SAParameters {
     alpha: f64,
     initial_temperature: f64,
     final_temperature: f64,
-    timelimit: u128,
     max_penalty: usize,
     iterations: usize
 }
 
 impl SAParameters {
-    pub fn new(initial_temperature: f64, final_temperature: f64, timelimit: u128, max_penalty: usize, iterations: usize) -> Self {
-        SAParameters { alpha: 0.99, initial_temperature, final_temperature, timelimit, max_penalty, iterations }
+    pub fn new(initial_temperature: f64, final_temperature: f64, max_penalty: usize, iterations: usize) -> Self {
+        SAParameters { alpha: 0.99, initial_temperature, final_temperature, max_penalty, iterations }
     }
 
     pub fn alpha(&self)-> f64 {
@@ -130,10 +126,6 @@ impl SAParameters {
         self.max_penalty
     }
 
-    pub fn iterations(&self)-> usize {
-        self.iterations
-    }
-
     pub fn initial_temperature(&self) -> f64 {
         self.initial_temperature
     }
@@ -141,10 +133,6 @@ impl SAParameters {
     pub fn final_temperature(&self) -> f64 {
         self.final_temperature
     }
-    pub fn timelimit(&self) -> u128 {
-        self.timelimit
-    }
-
     pub fn set_alpha_to_iterations(&mut self, iterations: usize) {
         self.iterations = iterations;
         self.alpha = (self.final_temperature / self.initial_temperature).powf(1.0 / iterations as f64)
@@ -157,7 +145,6 @@ impl Default for SAParameters {
             alpha: 0.99,
             initial_temperature: 10000.0,
             final_temperature: 10.0,
-            timelimit: 1000*60*10,
             max_penalty: 10,
             iterations: 100000
         }

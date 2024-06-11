@@ -1,5 +1,4 @@
 use super::*;
-use rand::{Rng, prelude::*};
 
 pub struct RemoveTask {}
 
@@ -18,8 +17,6 @@ impl NeighborhoodFunction for RemoveTask {
         if assigned_task.is_none() { return (0.0, change_tokens) }  // No assigned task
 
         let (res, task_id) = assigned_task.unwrap();
-        // println!("{}: {:?}", res, state);
-        // println!("Remove {} from res {}", task_id, res);
         state.remove_task(task_id);
         change_tokens.push(ChangeToken::RemoveTask(res, task_id));
 

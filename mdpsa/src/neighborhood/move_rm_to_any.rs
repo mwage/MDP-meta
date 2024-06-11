@@ -21,7 +21,6 @@ impl NeighborhoodFunction for MoveRMToAny {
         let (res, time) = rm.unwrap();
         let length = state.instance().duration_regular();
         let windows = state.get_all_suitable_windows_on_res(res, length, state.instance().horizon(), length, false);
-        // println!("{:?}", windows);
         if windows.is_empty() { return (0.0, change_tokens) } // Cannot move selected RM
 
         // Get new random time and add RM
@@ -30,7 +29,6 @@ impl NeighborhoodFunction for MoveRMToAny {
         let new_time = rng.gen_range(*left..*right+1);
 
         // Replace reg maintenance
-        // println!("RM: res {}: {}->{}", res, time, new_time);
         state.remove_regular_maintenance(res, time);
         state.add_regular_maintenance(res, new_time);
         change_tokens.push(ChangeToken::MovedRM(res, time, new_time));
@@ -38,9 +36,6 @@ impl NeighborhoodFunction for MoveRMToAny {
         // Repair a task that was uncovered due to move
         if self.repair {
             change_tokens.append(&mut state.repair());
-            // if let Some(new_rm) = state.repair_after_move_any(res, time) {
-            //     change_tokens.push(ChangeToken::AddRM(res, new_rm));
-            // }
         }
 
         ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens)

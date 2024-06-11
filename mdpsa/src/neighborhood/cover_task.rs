@@ -1,5 +1,4 @@
 use super::*;
-use rand::{Rng, prelude::*};
 
 pub struct CoverTask {
     greedy: bool
@@ -30,9 +29,7 @@ impl NeighborhoodFunction for CoverTask {
             }
         } else {
             // Cover randomly
-            // println!("{:?}", state);
             if let Some(new_rm) = state.find_reg_maint_cover_greedy(res, time) {
-                // println!("Try add at res {}: {}", res, new_rm);
                 state.add_regular_maintenance(res, new_rm);
                 change_tokens.push(ChangeToken::AddRM(res, new_rm));
             }

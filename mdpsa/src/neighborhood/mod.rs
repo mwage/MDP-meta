@@ -21,7 +21,7 @@ use move_rm_to_any::MoveRMToAny;
 use remove_rm::RemoveRM;
 use cover_task::CoverTask;
 use add_task::AddTask;
-use remove_task::RemoveTask;
+// use remove_task::RemoveTask;
 use add_mm::AddMM;
 use move_task::MoveTask;
 use move_mm_destructive::MoveMMDestructive;
@@ -56,8 +56,7 @@ impl PenaltyToken {
     pub fn to_penalty(&self, instance: &Instance, multi: usize) -> usize {
         instance.resources() * multi * match self {
             PenaltyToken::MajMaint => instance.duration_major(),
-            // PenaltyToken::MajMaint => instance.resources() * instance.resources() * instance.duration_major(),
-            PenaltyToken::Task(i) => 2 * instance.tasks()[*i].length(),
+            PenaltyToken::Task(i) => instance.tasks()[*i].length(),
             PenaltyToken::RegMaintNotCovered(x) => *x,
         }
     }
