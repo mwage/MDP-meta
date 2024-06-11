@@ -20,7 +20,7 @@ impl NeighborhoodFunction for MoveMMToAny {
 
         let (res, time) = mm.unwrap();
         let length = state.instance().duration_major();
-        // println!("-------------------------------\n{}: {:?}", res, state.jobs());
+        // println!("{}: {:?}", res, state);
         let windows = state.get_all_suitable_windows_on_res(res, length, state.instance().horizon(), length, true);
         // println!("{}: {:?}", res, windows);
         if windows.is_empty() { return (0.0, change_tokens) } // Cannot move selected MM

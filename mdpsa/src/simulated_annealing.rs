@@ -21,6 +21,10 @@ impl SimulatedAnnealing {
         }
     }
     
+    pub fn set_iterations(&mut self, iterations: usize) {
+        self.parameters.set_alpha_to_iterations(iterations);
+    }
+    
     pub fn neighborhood(&self) -> &Neighborhood {
         &self.neighborhood
     }
@@ -51,6 +55,10 @@ impl SimulatedAnnealing {
         let mut best_delta = 0f64;
         while self.temperature > self.parameters.final_temperature() {
             let delta = self.neighborhood.get_next();
+            let working_penalty = self.neighborhood.state().working_obj_val() - self.neighborhood.state().obj_value();
+            let actual_penalty = self.neighborhood.state().calc_penalty_from_scratch();
+            assert_eq!(working_penalty, actual_penalty);
+            assert!(self.neighborhood.state().is_feasible(false));
             iterations_since_improvement += 1;
             iterations += 1;
             if self.accept(delta) {
@@ -103,6 +111,10 @@ impl SAParameters {
     }
     pub fn timelimit(&self) -> u128 {
         self.timelimit
+    }
+
+    pub fn set_alpha_to_iterations(&mut self, iterations: usize) {
+        self.alpha = (self.final_temperature / self.initial_temperature).powf(1.0 / iterations as f64)
     }
 }
 

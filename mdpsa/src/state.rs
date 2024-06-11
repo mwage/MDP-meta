@@ -82,20 +82,23 @@ impl State {
     }
 
     pub fn initialize(&mut self) {
-        let mut penalties = Vec::new();
+        // Add initial penalties for unassigned stuff
+        for _ in 0..self.instance.resources() {
+            self.penalty_value += PenaltyToken::MajMaint.to_penalty(&self.instance, self.penalty_multi);
+        }
+        for task_id in 0..self.instance.tasks().len() {
+            self.penalty_value += PenaltyToken::Task(task_id).to_penalty(&self.instance, self.penalty_multi);
+        }
         // Add major maintenances at random (non-overlapping) times
         for res in 0..self.instance.resources() {
             self.add_major_maintenance(res, (res+1) * self.instance.duration_major());
         }
-
-        // Assign tasks to a random (free) resource
-        for task_idx in 0..self.instance.tasks().len() {
-            match (0..self.instance.resources()).find(|res| self.can_add_task(*res, task_idx)) {
-                Some(res) => { self.add_task(res, task_idx); },
-                None => { penalties.push(PenaltyToken::Task(task_idx)) }
+        // Assign tasks to the first (free) resource
+        for task_id in 0..self.instance.tasks().len() {
+            if let Some(res) = (0..self.instance.resources()).find(|res| self.can_add_task(*res, task_id)) {
+                self.add_task(res, task_id);
             };
         }
-
         // Add regular maintenances to cover any uncovered tasks (if possible)
         for res in 0..self.instance.resources() {
             let mut to_add = Vec::new();
@@ -128,29 +131,7 @@ impl State {
             for end_time in to_add {
                 self.add_regular_maintenance(res, end_time);
             }
-            last_added = 2 * self.instance.horizon();
-            // Add penalties for uncovered
-            for (&time, token) in self.jobs[res].iter().rev() {
-                if time > last_added || time < self.instance.time_regular() {
-                    continue;
-                }
-                match token {
-                    JobToken::Task(_) => {
-                        last_added = match self.jobs[res].iter().rev().filter(|(x, _)| **x < time).find(|(_, token)| *token == &JobToken::MajMaint || *token == &JobToken::RegMaint) {
-                            Some((x, _)) => *x,
-                            None => 0
-                        };
-                        let diff = time - last_added;
-                        if time - last_added > self.instance.time_regular() {
-                            penalties.push(PenaltyToken::RegMaintNotCovered(diff - self.instance.time_regular()));
-                        }
-                    },
-                    _ => last_added = time
-                }
-            }
         }
-        // Apply penalties
-        self.penalty_value += penalties.iter().map(|x| x.to_penalty(&self.instance, self.penalty_multi)).sum::<usize>();
     }
 
     pub fn is_feasible_quick(&self) -> bool {
@@ -175,7 +156,7 @@ impl State {
                         if *time <= cover_limit {
                             // Covered
                             continue;
-                            }
+                        }
                         let task = &self.instance.tasks()[*id];
                         penalty += PenaltyToken::RegMaintNotCovered(if task.start() > cover_limit {
                             // Fully uncovered
@@ -189,7 +170,17 @@ impl State {
                 };
             }
         }
-        // TODO: Other penalties
+
+        // Unassigned tasks
+        for (task_id, _) in self.assigned_tasks.iter().enumerate().filter(|(_, b)| !*b) {
+            penalty += PenaltyToken::Task(task_id).to_penalty(&self.instance, self.penalty_multi);
+        }
+        
+        // Unassigned maj maintenances
+        for _ in self.assigned_maj_maint.iter().enumerate().filter(|(_, b)| !*b) {
+            penalty += PenaltyToken::MajMaint.to_penalty(&self.instance, self.penalty_multi);
+        }
+
         penalty
     }
 
@@ -218,15 +209,19 @@ impl State {
         }
         // No overlap + maint coverage + maj uniqueness + reg matching
         let mut tasks = self.assigned_tasks.clone();
-        let mut previous = 0;
         tasks.negate();
         for (res, jobs) in self.jobs.iter().enumerate() {
+            let mut previous = 0;
+            // eprintln!("Check res {}", res);
             for (time, job) in jobs.iter() {
+                // eprintln!("Check time {}", time);
                 let difference = *time - previous;
                 match job {
                     // Check maint assignments
                     JobToken::MajMaint => {
                         if *time != self.maj_maint_ends[res] || difference < self.instance.duration_major() {
+                            eprintln!("{}={}", time, self.maj_maint_ends[res]);
+                            eprintln!("{}<{}, prev: {}", difference, self.instance.duration_major(), previous);
                             eprintln!("maj maint incorrect assignment 2");
                             return false; 
                         }
@@ -264,9 +259,9 @@ impl State {
         self.maj_maint_ends.iter().enumerate().any(|(res, end)| res != resource && (*end as isize - end_time as isize).abs() < self.instance.duration_major() as isize)
     }
 
-    pub fn can_add_task(&self, resource: usize, task_idx: usize) -> bool {
-        let start = self.instance.tasks()[task_idx].start();
-        let end = self.instance.tasks()[task_idx].end();
+    pub fn can_add_task(&self, resource: usize, task_id: usize) -> bool {
+        let start = self.instance.tasks()[task_id].start();
+        let end = self.instance.tasks()[task_id].end();
         let overlap_before = match self.jobs[resource].range(..end).next_back() {
             Some((time, _)) => *time > start,
             None => false
@@ -281,33 +276,59 @@ impl State {
         !overlap_before && !overlap_after
     }
 
-    pub fn add_task(&mut self, resource: usize, task_idx: usize) {
-        self.assigned_tasks.set(task_idx, true);
-        self.task_ass[task_idx] = resource;
-        self.jobs[resource].insert(self.instance.tasks()[task_idx].end(), JobToken::Task(task_idx));
+    pub fn add_task(&mut self, res: usize, task_id: usize) {
+        self.assigned_tasks.set(task_id, true);
+        self.task_ass[task_id] = res;
+        let task = &self.instance.tasks()[task_id];
+        self.jobs[res].insert(task.end(), JobToken::Task(task_id));
+
+        // Update penalties
+        self.penalty_value -= PenaltyToken::Task(task_id).to_penalty(&self.instance, self.penalty_multi);
+        // Uncovered penalties
+        if task.end() <= self.instance.time_regular(){ return; }    // All covered in first timeframe
+
+        let cover_limit = match self.jobs[res].range(..task.start()+1).filter(|(_, job)| **job == JobToken::MajMaint || **job == JobToken::RegMaint).next_back() {
+            Some((time, _)) => *time,
+            None => 0
+        } + self.instance.time_regular();
+
+        if cover_limit >= task.end() { return; }    // All covered
+        let additional_penalty = cmp::min(task.end() - cover_limit, task.length());
+        self.uncovered[res].insert(task.end());
+        self.penalty_value += PenaltyToken::RegMaintNotCovered(additional_penalty).to_penalty(&self.instance, self.penalty_multi);
     }
 
-    pub fn remove_task(&mut self, resource: usize, task_idx: usize) {
-        self.assigned_tasks.set(task_idx, false);
-        self.task_ass[task_idx] = usize::MAX;
-        let end_time = self.instance.tasks()[task_idx].end();
-        self.jobs[resource].remove(&end_time);
-        if self.uncovered[resource].contains(&end_time) {
-            self.uncovered[resource].remove(&end_time);
-            let last_maint = self.jobs[resource].range(..end_time)
-                .filter(|(_, job)| **job == JobToken::MajMaint || **job == JobToken::RegMaint).next_back();
-            let task = &self.instance.tasks()[task_idx];
-            let previously_uncovered = if last_maint.is_none() || task.start() > *last_maint.unwrap().0 {
+    pub fn remove_task(&mut self, task_id: usize) {
+        let res = self.task_ass[task_id];
+        self.assigned_tasks.set(task_id, false);
+        self.task_ass[task_id] = usize::MAX;
+        let end_time = self.instance.tasks()[task_id].end();
+        // println!("end: {}, uncovered: {}", end_time, self.uncovered[res].contains(&end_time));
+        self.jobs[res].remove(&end_time);
+        
+        // Update penalties
+        if self.uncovered[res].contains(&end_time) {
+            self.uncovered[res].remove(&end_time);
+            let cover_limit = match self.jobs[res].range(..end_time).filter(|(_, job)| **job == JobToken::MajMaint || **job == JobToken::RegMaint).next_back() {
+                    Some((time, _)) => *time,
+                    None => 0
+            } + self.instance.time_regular();
+            let task = &self.instance.tasks()[task_id];
+            // println!("limit = {:?}", cover_limit);
+            let previously_uncovered = if task.start() > cover_limit {
+                // println!("length");
                 task.length()
             } else {
-                last_maint.unwrap().0 - task.start()
+                // println!("calc");
+                task.end() - cover_limit
             };
-            // println!("Remove task {}", PenaltyToken::RegMaintNotCovered(previously_uncovered).to_penalty(&self.instance, self.penalty_multi));
+            // println!("Prev: {}", previously_uncovered);
+            // println!("Remove {}", PenaltyToken::RegMaintNotCovered(previously_uncovered).to_penalty(&self.instance, self.penalty_multi));
             self.penalty_value -= PenaltyToken::RegMaintNotCovered(previously_uncovered).to_penalty(&self.instance, self.penalty_multi);
             // Task was uncovered, remove penalty for it
         }
-        // println!("Add task {}", PenaltyToken::Task(task_idx).to_penalty(&self.instance, self.penalty_multi));
-        self.penalty_value += PenaltyToken::Task(task_idx).to_penalty(&self.instance, self.penalty_multi);
+        // println!("Add {}", PenaltyToken::Task(task_id).to_penalty(&self.instance, self.penalty_multi));
+        self.penalty_value += PenaltyToken::Task(task_id).to_penalty(&self.instance, self.penalty_multi);
     }
 
     pub fn add_major_maintenance(&mut self, res: usize, end_time: usize) {
@@ -498,7 +519,7 @@ impl State {
         let mut prev = window_start - length;
         let mut finished_interval = false;
         for (end, job) in self.jobs[res].range(window_start - length..) {
-            if *end < window_start - length { continue; }    // Need to check tasks that would overlap if end is set to < window_start-length
+            if *end < window_start - length { continue; }    // No need to check jobs that would overlap if end is set to < window_start-length
             let start = match job {
                 JobToken::MajMaint => *end - self.instance.duration_major(),
                 JobToken::RegMaint => *end - self.instance.duration_regular(),
@@ -522,7 +543,7 @@ impl State {
                 None => length
             };
             if window_end - last_job_end >= length {
-                possible_windows.push((last_job_end, window_end));
+                possible_windows.push((last_job_end + length, window_end));
             }
         }
 
@@ -638,7 +659,18 @@ impl State {
         if num_unassigned == 0 {
             return None;
         }
-        Some(self.assigned_tasks.iter().enumerate().filter(|(_, b)| !*b).skip(thread_rng().gen_range(0..self.instance.tasks().len())).next().unwrap().0)
+        
+        Some(self.assigned_tasks.iter().enumerate().filter(|(_, b)| !*b).skip(thread_rng().gen_range(0..num_unassigned)).next().unwrap().0)
+    }
+
+    // (res, taskid)
+    pub fn get_rand_assigned_task(&self) -> Option<(usize, usize)> {
+        let num_assigned = self.assigned_tasks.iter().filter(|b| *b).count();
+        if num_assigned == 0 {
+            return None;
+        }
+        let task_id = self.assigned_tasks.iter().enumerate().filter(|(_, b)| *b).skip(thread_rng().gen_range(0..num_assigned)).next().unwrap().0;
+        Some((self.task_ass[task_id], task_id))
     }
 
     // (res, time)

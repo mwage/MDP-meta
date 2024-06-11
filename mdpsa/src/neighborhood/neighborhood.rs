@@ -39,9 +39,11 @@ impl Neighborhood {
             Box::new(CoverTask::new(true)),
             Box::new(MoveMMToAny::new(false)),
             Box::new(MoveMMToAny::new(true)),
+            Box::new(AddTask::new(true)),
+            Box::new(RemoveTask::new()),
         ];
         let selected = neighborhoods.choose(&mut thread_rng()).unwrap();
-        // println!("{}", selected.to_string());
+        // println!("-------------------------------\n{}", selected.to_string());
         let (delta, tokens) = selected.get_neighbor(&mut self.state);
         self.last_changes = tokens;
         
@@ -64,7 +66,9 @@ impl Neighborhood {
                     self.state.remove_major_maintenance(*res);
                     self.state.add_major_maintenance(*res, *prev);
                 },
-                ChangeToken::RemoveRM(res, time) => self.state.add_regular_maintenance(*res, *time)
+                ChangeToken::RemoveRM(res, time) => self.state.add_regular_maintenance(*res, *time),
+                ChangeToken::AddTask(task_id) => self.state.remove_task(*task_id),
+                ChangeToken::RemoveTask(res, task_id) => self.state.add_task(*res, *task_id),
                 // ChangeToken::AddRM(res, new_rm) => self.state.remove_regular_maintenance(*res, *new_rm),
             }
         }

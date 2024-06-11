@@ -21,18 +21,21 @@ fn main() {
     for j in 0..100{
     let instance = Instance::new_from_file("./instances/mdp-3-7-5.json");
     let instance_name = "mdp-3-7-5".to_string();
+
+
     let mut sa = SimulatedAnnealing::new(Neighborhood::new(instance), SAParameters::default());
+    sa.set_iterations(1000);
     // println!("Start: {} feasible: {} with {}({})", instance_name, sa.neighborhood().state().is_feasible(false), sa.neighborhood().state().obj_value(), sa.neighborhood().state().working_obj_val() - sa.neighborhood().state().obj_value());
     sa.solve();
     println!("After: {} feasible: {} with {}({})", instance_name, sa.neighborhood().state().is_feasible(false), sa.neighborhood().state().obj_value(), sa.neighborhood().state().working_obj_val() - sa.neighborhood().state().obj_value());
 
 
 
-//     // println!("Start instance {}", instance_name);
+// //     // println!("Start instance {}", instance_name);
 //     let mut neighborhood = Neighborhood::new(instance);
-//     // println!("Finished feasibility");
+// //     // println!("Finished feasibility");
 //     // println!("Start: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
-//     // println!("{:?}", neighborhood.state().jobs());
+// //     // println!("{:?}", neighborhood.state().jobs());
     
 //     for i in 0..100000 {
 //         // println!("{:?}", neighborhood.state().jobs());
@@ -41,20 +44,30 @@ fn main() {
 //         //     println!("{:?}", neighborhood.state().get_all_suitable_windows_on_res(res, length, neighborhood.state().instance().horizon(), length));
 //         // }
 
-//         neighborhood.get_next();
 //         // println!("{:?}", neighborhood.state().jobs());
+//         neighborhood.get_next();
 //         // println!("{:?}", neighborhood.state().uncovered());
 //         // neighborhood.reject();
-//         // println!("{}: {} feasible: {} with {}({})", i, instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
-//         if !neighborhood.state().is_feasible(false) || neighborhood.state().working_obj_val() - neighborhood.state().obj_value() != neighborhood.state().calc_penalty_from_scratch() {
+//         let working_penalty = neighborhood.state().working_obj_val() - neighborhood.state().obj_value();
+//         let actual_penalty = neighborhood.state().calc_penalty_from_scratch();
+//         // println!("{}: {} feasible: {} with {}({})", i, instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), working_penalty);
+        
+//         if working_penalty != actual_penalty {
+//             println!("Penalties not matching: working: {}, actual: {}, diff = {}", working_penalty, actual_penalty, working_penalty.abs_diff(actual_penalty));
 //             println!("{:?}", neighborhood.state());
-//             panic!();
+//             panic!("Penalties wrong");
 //         }
         
+//         if !neighborhood.state().is_feasible(false) {
+//             println!("Infeasible assignments!");
+//             println!("{:?}", neighborhood.state());
+//             panic!("Infeasible");
+//         }        
 //         // println!("---------------------------------------------------------------------------------------------");
 //         // println!("{:?}", neighborhood.state());
 //     }
-//     // println!("After: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
-//     // println!("{:?}", neighborhood.state().jobs());
+
+//     println!("After: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
+// //     // println!("{:?}", neighborhood.state().jobs());
 }
 }
