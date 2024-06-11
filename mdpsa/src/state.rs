@@ -1,5 +1,5 @@
 use bit_vec::BitVec;
-use crate::{instance::Instance, neighborhood::PenaltyToken};
+use crate::{instance::Instance, neighborhood::{ChangeToken, PenaltyToken}};
 use super::instance::Task;
 use std::{collections::{BTreeMap, BTreeSet}, cmp};
 use rand::{rngs::ThreadRng, Rng};
@@ -12,7 +12,7 @@ pub enum JobToken {
     MajMaint
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct State {
     // Currently unassigned jobs:
     instance: Instance,
@@ -81,6 +81,14 @@ impl State {
         &self.uncovered
     }
 
+    pub fn maj_maint_ends(&self) -> &Vec<usize> {
+        &self.maj_maint_ends
+    }
+    
+    pub fn penalty_multi(&self) -> usize {
+        self.penalty_multi
+    }
+
     pub fn initialize(&mut self) {
         // Add initial penalties for unassigned stuff
         for _ in 0..self.instance.resources() {
@@ -89,49 +97,50 @@ impl State {
         for task_id in 0..self.instance.tasks().len() {
             self.penalty_value += PenaltyToken::Task(task_id).to_penalty(&self.instance, self.penalty_multi);
         }
-        // Add major maintenances at random (non-overlapping) times
-        for res in 0..self.instance.resources() {
-            self.add_major_maintenance(res, (res+1) * self.instance.duration_major());
-        }
-        // Assign tasks to the first (free) resource
-        for task_id in 0..self.instance.tasks().len() {
-            if let Some(res) = (0..self.instance.resources()).find(|res| self.can_add_task(*res, task_id)) {
-                self.add_task(res, task_id);
-            };
-        }
-        // Add regular maintenances to cover any uncovered tasks (if possible)
-        for res in 0..self.instance.resources() {
-            let mut to_add = Vec::new();
-            let mut last_added = 2 * self.instance.horizon();
-            // Iterate jobs on resource in reverse order
-            for (&time, token) in self.jobs[res].iter().rev() {
-                if time > last_added || time < self.instance.time_regular() {
-                    continue;
-                }
-                match token {
-                    JobToken::Task(_) => {
-                        match self.has_maint_covered(res, time) {
-                            Some(x) => { last_added = x; continue; },
-                            None => {}
-                        };
+        self.repair();
+        // // Add major maintenances at random (non-overlapping) times
+        // for res in 0..self.instance.resources() {
+        //     self.add_major_maintenance(res, (res+1) * self.instance.duration_major());
+        // }
+        // // Assign tasks to the first (free) resource
+        // for task_id in 0..self.instance.tasks().len() {
+        //     if let Some(res) = (0..self.instance.resources()).find(|res| self.can_add_task(*res, task_id)) {
+        //         self.add_task(res, task_id);
+        //     };
+        // }
+        // // Add regular maintenances to cover any uncovered tasks (if possible)
+        // for res in 0..self.instance.resources() {
+        //     let mut to_add = Vec::new();
+        //     let mut last_added = 2 * self.instance.horizon();
+        //     // Iterate jobs on resource in reverse order
+        //     for (&time, token) in self.jobs[res].iter().rev() {
+        //         if time > last_added || time < self.instance.time_regular() {
+        //             continue;
+        //         }
+        //         match token {
+        //             JobToken::Task(_) => {
+        //                 match self.has_maint_covered(res, time) {
+        //                     Some(x) => { last_added = x; continue; },
+        //                     None => {}
+        //                 };
                         
-                        match self.find_reg_maint_cover_greedy(res, time) {
-                            Some(x) => {
-                                last_added = x;
-                                to_add.push(x);
-                            },
-                            None => {
-                                self.uncovered[res].insert(time);
-                            }
-                        }
-                    },
-                    _ => {}
-                };
-            }
-            for end_time in to_add {
-                self.add_regular_maintenance(res, end_time);
-            }
-        }
+        //                 match self.find_reg_maint_cover_greedy(res, time) {
+        //                     Some(x) => {
+        //                         last_added = x;
+        //                         to_add.push(x);
+        //                     },
+        //                     None => {
+        //                         self.uncovered[res].insert(time);
+        //                     }
+        //                 }
+        //             },
+        //             _ => {}
+        //         };
+        //     }
+        //     for end_time in to_add {
+        //         self.add_regular_maintenance(res, end_time);
+        //     }
+        // }
     }
 
     pub fn is_feasible_quick(&self) -> bool {
@@ -367,6 +376,61 @@ impl State {
         self.update_changes_maint_removed(start_time, end_time, res);
     }
     
+    pub fn repair(&mut self) -> Vec<ChangeToken> {
+        let mut change_tokens = Vec::new();
+        let mut rng = thread_rng();
+        // Try repair MM
+        let mut res_order = (0..self.instance().resources()).collect::<Vec<usize>>();
+        res_order.shuffle(&mut thread_rng());
+        for res in 0..self.instance.resources() {
+            if self.assigned_maj_maint[res] { continue; }
+
+            let new_time = self.can_add_mm_without_destruction(res);
+            if new_time.is_none() { continue; } // Cannot repair
+
+            self.add_major_maintenance(res, new_time.unwrap());
+            change_tokens.push(ChangeToken::AddMM(res));
+        }
+
+        // Try repair Tasks
+        for task_id in 0..self.instance.tasks().len() {
+            if self.assigned_tasks[task_id] { continue; }
+
+            let mut order = (0..self.instance().resources()).collect::<Vec<usize>>();
+            order.shuffle(&mut thread_rng());
+            for r in order {
+                if self.can_add_task(r, task_id) {
+                    self.add_task(r, task_id);
+                    change_tokens.push(ChangeToken::AddTask(task_id));
+                    break;
+                }
+            }
+        }
+
+        // Try cover
+        for res in 0..self.instance.resources() {
+            let mut last_maint = usize::MAX;
+            let mut to_add = Vec::new();
+            for time in self.uncovered[res].iter().rev() {
+                if *time > last_maint { continue; } // Already covered in previous step
+
+                let new_rm = self.find_reg_maint_cover_random(res, *time);
+                if new_rm.is_none() { continue; }   // Cannot cover task
+
+                let new_rm = new_rm.unwrap();
+                to_add.push(new_rm);
+                last_maint = new_rm;
+            }
+            for time in to_add.into_iter() {
+                self.add_regular_maintenance(res, time);
+                change_tokens.push(ChangeToken::AddRM(res, time));
+            }
+        }
+
+        change_tokens
+    }
+
+
     // TODO: Consider adding previously partially covered as well (increase range)
     pub fn repair_after_move(&mut self, res: usize, prev_time: usize, new_time: usize) -> Option<usize> {
         // Repair if a task was (partly) uncovered from move, but only if it was completely covered before
@@ -614,7 +678,7 @@ impl State {
     // Get all tasks that overlap with interval on resource
     pub fn get_overlaps(&self, res: usize, start: usize, end: usize) -> Vec<(usize, JobToken)> {
         let mut overlapping = Vec::new();
-        for (end_time, job) in self.jobs[res].range(start..) {
+        for (end_time, job) in self.jobs[res].range(start+1..) {
             if *end_time <= end {
                 // Job ends before end time => clearly overlapping
                 overlapping.push((*end_time, job.clone()));
@@ -641,6 +705,21 @@ impl State {
             .filter(|(r, time)| *r != res && end.abs_diff(**time) < self.instance.duration_major())
             .map(|(r, time)| (r, *time))
             .collect()
+    }
+
+    // (time)
+    pub fn can_add_mm_without_destruction(&self, res: usize) -> Option<usize> {
+        let length = self.instance().duration_major();
+        // println!("{}: {:?}", res, state);
+        let windows = self.get_all_suitable_windows_on_res(res, length, self.instance().horizon(), length, true);
+        // println!("{}: {:?}", res, windows);
+        if windows.is_empty() { return None; } // Cannot move selected MM
+
+        // Get new random time and add MM
+        let mut rng = thread_rng();
+        let (left, right) = windows.choose(&mut rng).unwrap();
+
+        Some(rng.gen_range(*left..*right+1))
     }
 
     // (res, time)
@@ -812,6 +891,7 @@ impl State {
     // Updates objective values, maintenance changes, uncovered and penalty when a maintenance is removed
     fn update_changes_maint_removed(&mut self, start_time: usize, end_time: usize, res: usize) {
         // println!("---------------------Remove Maint-------------------------");
+        // println!("{}={}", start_time, end_time);
         // Update maintenance changes
         for (_, stamp) in self.maintenance_changes.range_mut(start_time..end_time) {
             stamp.count -= 1;
@@ -820,6 +900,7 @@ impl State {
         self.maintenance_changes.get_mut(&start_time).unwrap().num_changed -= 1;
         self.maintenance_changes.get_mut(&end_time).unwrap().num_changed -= 1;
 
+        // println!("Try update");
         // Update obj valuee
         let mut prev = (start_time, *self.maintenance_changes.get(&start_time).unwrap());
         let mut change = 0;
@@ -830,9 +911,11 @@ impl State {
         }
         self.obj_value -= change;
 
+        // println!("start");
         if self.maintenance_changes.get_mut(&start_time).unwrap().num_changed == 0 {
             self.maintenance_changes.remove(&start_time);
-        };        
+            };        
+        // println!("end");
         if self.maintenance_changes.get_mut(&end_time).unwrap().num_changed == 0 {
             self.maintenance_changes.remove(&end_time);
         };

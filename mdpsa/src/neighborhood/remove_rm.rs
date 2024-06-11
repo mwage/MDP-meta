@@ -23,10 +23,11 @@ impl NeighborhoodFunction for RemoveRM {
         change_tokens.push(ChangeToken::RemoveRM(res, time));
         
         // Repair a task that was uncovered due to move
-        if self.repair { 
-            if let Some(new_rm) = state.repair_after_remove(res, time) {
-                change_tokens.push(ChangeToken::AddRM(res, new_rm));
-            }
+        if self.repair {
+            change_tokens.append(&mut state.repair());
+            // if let Some(new_rm) = state.repair_after_remove(res, time) {
+            //     change_tokens.push(ChangeToken::AddRM(res, new_rm));
+            // }
         }
 
         ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens)

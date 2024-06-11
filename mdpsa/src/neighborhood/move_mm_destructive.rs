@@ -3,35 +3,33 @@ use crate::state::JobToken;
 use super::*;
 use rand::{Rng, prelude::*};
 
-/// Adds an unassigned task (forcibly at a random location)
-pub struct AddMM {
+pub struct MoveMMDestructive {
     repair: bool
 }
 
-// Adds am
-impl AddMM {
+impl MoveMMDestructive {
     pub fn new(repair: bool) -> Self {
-        AddMM {
-            repair
-        }
+        MoveMMDestructive { repair }
     }
 }
 
-impl NeighborhoodFunction for AddMM {
+impl NeighborhoodFunction for MoveMMDestructive {
     fn get_neighbor(&self, state: &mut State) -> (f64, Vec<ChangeToken>) {
         let obj_prev = state.working_obj_val();
         let mut change_tokens = Vec::new();
+        let mm = state.get_rand_mm();
+        if mm.is_none() { return (0.0, change_tokens) }  // No major maintenance assigned
 
-        let unassigned_mm = state.get_rand_unassigned_mm();
-        if unassigned_mm.is_none() { return (0.0, change_tokens) }  // No unassigned mm
-        
-        let res = unassigned_mm.unwrap();
-        
+        let (res, mm_time) = mm.unwrap();
         // Add at random time:
         let new_endtime = thread_rng().gen_range(state.instance().duration_major()..state.instance().horizon() + 1);
 
+        // Remove old mm
+        state.remove_major_maintenance(res);
+        change_tokens.push(ChangeToken::RemoveMM(res, mm_time));
+
         // Remove all overlaps
-        for (time, job) in state.get_overlaps(res,new_endtime - state.instance().duration_major(), new_endtime).iter() {
+        for (time, job) in state.get_overlaps(res, new_endtime - state.instance().duration_major(), new_endtime).iter() {
             match job {
                 JobToken::MajMaint => { panic!("Two mm on res?") },
                 JobToken::RegMaint => {
@@ -49,10 +47,12 @@ impl NeighborhoodFunction for AddMM {
             state.remove_major_maintenance(r);
             change_tokens.push(ChangeToken::RemoveMM(r, time));
         }
-        // Add new mm
+
+        // Add new major maintenance
         state.add_major_maintenance(res, new_endtime);
         change_tokens.push(ChangeToken::AddMM(res));
         
+        // Repair a task that was uncovered due to move
         if self.repair {
             change_tokens.append(&mut state.repair());
         }
@@ -61,8 +61,8 @@ impl NeighborhoodFunction for AddMM {
     }
 }
 
-impl ToString for AddMM {
+impl ToString for MoveMMDestructive {
     fn to_string(&self) -> String {
-        format!("Add task ({})", if self.repair { "rep"} else { "norep" })
+        format!("Move Major destructively ({})", if self.repair { "rep"} else { "norep" })
     }
 }

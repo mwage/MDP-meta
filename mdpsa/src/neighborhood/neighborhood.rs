@@ -27,21 +27,31 @@ impl Neighborhood {
 
     pub fn get_next(&mut self) -> f64 {
         let neighborhoods: Vec<Box<dyn NeighborhoodFunction>> = vec![
-            Box::new(MoveRM::new(false, 100)),
+            // Box::new(MoveRM::new(false, 100)),  // norep
             Box::new(MoveRM::new(true, 100)),
-            Box::new(MoveMM::new(false, 100)),
+            // Box::new(MoveMM::new(false, 100)),  // norep
             Box::new(MoveMM::new(true, 100)),
-            Box::new(RemoveRM::new(false)),
+            // Box::new(RemoveRM::new(false)), // norep
             Box::new(RemoveRM::new(true)),
-            Box::new(MoveRMToAny::new(false)),
+            // Box::new(MoveRMToAny::new(false)),  // norep
             Box::new(MoveRMToAny::new(true)),
-            Box::new(CoverTask::new(false)),
-            Box::new(CoverTask::new(true)),
-            Box::new(MoveMMToAny::new(false)),
+            Box::new(CoverTask::new(false)),    
+            Box::new(CoverTask::new(true)),     // greedy
+            // Box::new(MoveMMToAny::new(false)),  // norep
             Box::new(MoveMMToAny::new(true)),
-            Box::new(AddTask::new(false, true)),
-            Box::new(RemoveTask::new()),
+            // Box::new(AddTask::new(false, false)),   // norep
+            Box::new(AddTask::new(false, true)),    
+            // Box::new(AddTask::new(true, false)),    // greedy, norep
+            Box::new(AddTask::new(true, true)),     // greedy
+            // Box::new(RemoveTask::new()), // Seems to make it significantly worse, check again with working increasing penalties
+            // Box::new(AddMM::new(false)),    // norep
             Box::new(AddMM::new(true)),
+            // Box::new(MoveTask::new(false)),  // norep
+            Box::new(MoveTask::new(true)),
+            // Box::new(MoveMMDestructive::new(false)),  // norep
+            Box::new(MoveMMDestructive::new(true)),
+            // Box::new(SwapMM::new(false)),     // norep
+            Box::new(SwapMM::new(true)),
         ];
         let selected = neighborhoods.choose(&mut thread_rng()).unwrap();
         // println!("-------------------------------\n{}", selected.to_string());

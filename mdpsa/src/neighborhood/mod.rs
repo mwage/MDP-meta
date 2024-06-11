@@ -8,6 +8,9 @@ mod cover_task;
 mod add_task;
 mod remove_task;
 mod add_mm;
+mod move_task;
+mod move_mm_destructive;
+mod swap_mm;
 
 use super::{State, Instance};
 
@@ -20,6 +23,10 @@ use cover_task::CoverTask;
 use add_task::AddTask;
 use remove_task::RemoveTask;
 use add_mm::AddMM;
+use move_task::MoveTask;
+use move_mm_destructive::MoveMMDestructive;
+use swap_mm::SwapMM;
+
 
 pub use neighborhood::Neighborhood;
 
@@ -47,8 +54,9 @@ pub enum PenaltyToken {
 
 impl PenaltyToken {
     pub fn to_penalty(&self, instance: &Instance, multi: usize) -> usize {
-        multi * match self {
-            PenaltyToken::MajMaint => instance.resources() * instance.duration_major(),
+        instance.resources() * multi * match self {
+            PenaltyToken::MajMaint => instance.duration_major(),
+            // PenaltyToken::MajMaint => instance.resources() * instance.resources() * instance.duration_major(),
             PenaltyToken::Task(i) => 2 * instance.tasks()[*i].length(),
             PenaltyToken::RegMaintNotCovered(x) => *x,
         }
