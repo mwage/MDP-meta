@@ -24,7 +24,7 @@ fn main() {
 
 
     let mut sa = SimulatedAnnealing::new(Neighborhood::new(instance), SAParameters::default());
-    sa.set_iterations(100000);
+    sa.set_iterations(10000);
     // println!("Start: {} feasible: {} with {}({})", instance_name, sa.neighborhood().state().is_feasible(false), sa.neighborhood().state().obj_value(), sa.neighborhood().state().working_obj_val() - sa.neighborhood().state().obj_value());
     sa.solve();
     if sa.neighborhood().state().is_feasible(true) {
@@ -72,6 +72,8 @@ fn main() {
 //     }
 
 //     println!("After: {} feasible: {} with {}({})", instance_name, neighborhood.state().is_feasible(false), neighborhood.state().obj_value(), neighborhood.state().working_obj_val() - neighborhood.state().obj_value());
-// //     // println!("{:?}", neighborhood.state().jobs());
+//     println!("{:?}", neighborhood.state().jobs());
+
+
 }
 }

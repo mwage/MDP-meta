@@ -1,14 +1,18 @@
+use crate::state::JobToken;
+
 use super::*;
 use rand::{Rng, prelude::*};
 
 pub struct AddTask {
-    greedy: bool
+    greedy: bool,
+    repair: bool
 }
 
 impl AddTask {
-    pub fn new(greedy: bool) -> Self {
+    pub fn new(greedy: bool, repair: bool) -> Self {
         AddTask { 
-            greedy
+            greedy,
+            repair
         }
     }
 }
@@ -22,34 +26,45 @@ impl NeighborhoodFunction for AddTask {
         if unassigned_task.is_none() { return (0.0, change_tokens) }  // No unassigned task
         
         let task_id = unassigned_task.unwrap();
-        for res in 0..state.instance().resources() {
-            if state.can_add_task(res, task_id) {
-                // println!("{:?}", state.jobs());
-                // println!("Add {} to res {}", task_id, res);
-                state.add_task(res, task_id);
-                change_tokens.push(ChangeToken::AddTask(task_id));
-                break;
+        let task = &state.instance().tasks()[task_id];
+        
+        if self.greedy {
+            for res in 0..state.instance().resources() {
+                if state.can_add_task(res, task_id) {
+                    state.add_task(res, task_id);
+                    change_tokens.push(ChangeToken::AddTask(task_id));
+                    return ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens);
+                }
             }
         }
         
-        // let task = state.instance().tasks()[task_id];
+        // Add to random resource:
+        let res = thread_rng().gen_range(0..state.instance().resources());
+        // Remove all overlaps
+        let overlaps = state.get_overlaps(res, task.start(), task.end());
+        for (time, job) in overlaps.iter() {
+            match job {
+                JobToken::MajMaint => {
+                    state.remove_major_maintenance(res);
+                    change_tokens.push(ChangeToken::RemoveMM(res, *time))
+                },
+                JobToken::RegMaint => {
+                    state.remove_regular_maintenance(res, *time);
+                    change_tokens.push(ChangeToken::RemoveRM(res, *time))
+                },
+                JobToken::Task(id) => {
+                    state.remove_task(*id);
+                    change_tokens.push(ChangeToken::RemoveTask(res, *id))
+                }
+            }
+        }
+        // Add new task
+        state.add_task(res, task_id);
+        change_tokens.push(ChangeToken::AddTask(task_id));
         
-
-        // if self.greedy {
-        //     // Cover greedily
-        //     if let Some(new_rm) = state.find_reg_maint_cover_greedy(res, time) {
-        //         state.add_regular_maintenance(res, new_rm);
-        //         change_tokens.push(ChangeToken::AddRM(res, new_rm));
-        //     }
-        // } else {
-        //     // Cover randomly
-        //     // println!("{:?}", state);
-        //     if let Some(new_rm) = state.find_reg_maint_cover_greedy(res, time) {
-        //         // println!("Try add at res {}: {}", res, new_rm);
-        //         state.add_regular_maintenance(res, new_rm);
-        //         change_tokens.push(ChangeToken::AddRM(res, new_rm));
-        //     }
-        // }
+        if self.repair {
+            // repair
+        }
 
         ((state.working_obj_val() as isize - obj_prev as isize) as f64, change_tokens)
     }
@@ -57,6 +72,6 @@ impl NeighborhoodFunction for AddTask {
 
 impl ToString for AddTask {
     fn to_string(&self) -> String {
-        format!("Add task ({})", if self.greedy { "greedy"} else { "random" })
+        format!("Add task ({}, {})", if self.greedy { "greedy"} else { "random" }, if self.repair { "rep"} else { "norep" })
     }
 }

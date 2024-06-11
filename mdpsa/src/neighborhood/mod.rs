@@ -28,8 +28,10 @@ pub trait NeighborhoodFunction: ToString {
 pub enum ChangeToken {
     MovedRM(usize, usize, usize),   // (res, prev, new)
     AddRM(usize, usize),   // (res, time)
-    MovedMM(usize, usize),   // (res, prev)
     RemoveRM(usize, usize), // (res, time)
+    AddMM(usize),   // (res)
+    MovedMM(usize, usize),   // (res, prev)
+    RemoveMM(usize, usize), // (res, time)
     AddTask(usize), // (task_id)
     RemoveTask(usize, usize), // (res, task_id)
     // AddMM(usize, usize),   // (res, time)

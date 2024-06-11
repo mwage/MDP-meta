@@ -193,6 +193,7 @@ impl State {
 
         // Correct maint assignments
         for (i, time) in self.maj_maint_ends.iter().enumerate() {
+            if *time == 0 && !self.assigned_maj_maint[i] { continue; }
             if self.jobs[i].get(time) != Some(&JobToken::MajMaint) {
                 eprintln!("maj maint incorrect assignment");
                 return false;
@@ -202,6 +203,7 @@ impl State {
         for i in 0..self.instance.resources() {
             for j in i+1..self.instance.resources() {
                 if self.maj_maint_ends[i].abs_diff(self.maj_maint_ends[j]) < self.instance.duration_major() {
+                    if self.maj_maint_ends[i] == 0 || self.maj_maint_ends[j] == 0 { continue; }
                     eprintln!("maj maint overlap");
                     return false; 
                 }
@@ -611,6 +613,30 @@ impl State {
         }
 
         windows_for_mm
+    }
+
+    // Get all tasks that overlap with interval on resource
+    pub fn get_overlaps(&self, res: usize, start: usize, end: usize) -> Vec<(usize, JobToken)> {
+        let mut overlapping = Vec::new();
+        for (end_time, job) in self.jobs[res].range(start..) {
+            if *end_time <= end {
+                // Job ends before end time => clearly overlapping
+                overlapping.push((*end_time, job.clone()));
+                continue;
+            }
+            // Job ends after overlap-end => Check if it overlaps
+            let start = match job {
+                JobToken::MajMaint => end_time - self.instance.duration_major(),
+                JobToken::RegMaint => end_time - self.instance.duration_regular(),
+                JobToken::Task(id) => self.instance.tasks()[*id].start()
+            };
+            if start < end {
+                overlapping.push((*end_time, job.clone()));
+            }
+            break;
+        }
+
+        overlapping
     }
 
     // (res, time)
