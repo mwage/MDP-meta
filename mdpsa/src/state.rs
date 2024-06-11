@@ -186,8 +186,8 @@ impl State {
 
     pub fn is_feasible(&self, requires_completeness: bool) -> bool {
         // All mandatory jobs assigned 
-        if requires_completeness && (!self.assigned_maj_maint.all() || !self.assigned_tasks.all() && !self.uncovered.iter().all(|x| x.is_empty())) {
-            eprintln!("Not all jobs assigned, but mandatory enabled");
+        if requires_completeness && (!self.assigned_maj_maint.all() || !self.assigned_tasks.all() || !self.uncovered.iter().all(|x| x.is_empty())) {
+            // eprintln!("Not complete, but completeness enabled");
             return false; 
         }
 
