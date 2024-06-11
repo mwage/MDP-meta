@@ -15,6 +15,8 @@ use state::State;
 
 
 fn main() {
+    let runs = 10;
+    let timeout = 10*60*1000;   // 10 minutes
     println!("instance, min, avg, num_feasible, iterations, iterations_since_accept, iterations_since_improvement, runtime");
     for path in fs::read_dir("./instances").unwrap() {
         // let instance = Instance::new_from_file("./instances/mdp-3-7-5.json");
@@ -22,18 +24,17 @@ fn main() {
         let instance_name = path.unwrap().path().to_str().unwrap().to_string();
         let instance = Instance::new_from_file(&instance_name);
         let instance_name = instance_name.split("\\").last().unwrap().split(".").next().unwrap();
-        let results = run_multithreaded(instance, 10);
-        println!("{}", results_to_string(results, &instance_name));
+        println!("{}", results_to_string(run_multithreaded(instance, runs, timeout), &instance_name));
     }
 }
 
-fn run_multithreaded(instance: Instance, runs: usize) -> Vec<Result> {
+fn run_multithreaded(instance: Instance, runs: usize, timeout: usize) -> Vec<Result> {
     thread::scope(|s| {
         let mut handles = Vec::new();
         for _ in 0..runs {
             let instance_clone = instance.clone();
             handles.push(s.spawn(move |_| {
-                run_instance(instance_clone, 1*10*1000)
+                run_instance(instance_clone, timeout)
             }));
         }
         let mut results = Vec::new();
@@ -44,9 +45,8 @@ fn run_multithreaded(instance: Instance, runs: usize) -> Vec<Result> {
     }).unwrap()
 }
 
-
 fn run_instance(instance: Instance, timeout: usize) -> Result {
-    let test_iterations = 1000;
+    let test_iterations = 100000;
     let mut sa = SimulatedAnnealing::new(Neighborhood::new(instance), SAParameters::default());
     // Estimate iterations for timeout
     sa.set_iterations(test_iterations);
