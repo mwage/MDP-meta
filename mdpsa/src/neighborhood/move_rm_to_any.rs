@@ -48,6 +48,6 @@ impl NeighborhoodFunction for MoveRMToAny {
 
 impl ToString for MoveRMToAny {
     fn to_string(&self) -> String {
-        format!("Move Regular To Any ({})", self.repair)
+        format!("Move Regular To Any ({})", if self.repair { "rep"} else { "norep" })
     }
 }

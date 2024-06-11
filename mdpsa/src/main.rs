@@ -18,20 +18,20 @@ fn main() {
         let instance_name = instance_name.split("\\").last().unwrap().split(".").next().unwrap();
     }
 
-    for j in 0..100{
+    // for j in 0..100 {
     let instance = Instance::new_from_file("./instances/mdp-3-7-5.json");
     let instance_name = "mdp-3-7-5".to_string();
 
 
     let mut sa = SimulatedAnnealing::new(Neighborhood::new(instance), SAParameters::default());
-    sa.set_iterations(10000);
+    sa.set_iterations(1000000);
     // println!("Start: {} feasible: {} with {}({})", instance_name, sa.neighborhood().state().is_feasible(false), sa.neighborhood().state().obj_value(), sa.neighborhood().state().working_obj_val() - sa.neighborhood().state().obj_value());
     sa.solve();
     if sa.neighborhood().state().is_feasible(true) {
         eprintln!("{}", sa.neighborhood().state().obj_value());
         println!("{:?}", sa.neighborhood().state());
     }
-    // println!("After: {} feasible: {} with {}({})", instance_name, sa.neighborhood().state().is_feasible(false), sa.neighborhood().state().obj_value(), sa.neighborhood().state().working_obj_val() - sa.neighborhood().state().obj_value());
+    println!("After: {} feasible: {} with {}({})", instance_name, sa.neighborhood().state().is_feasible(false), sa.neighborhood().state().obj_value(), sa.neighborhood().state().working_obj_val() - sa.neighborhood().state().obj_value());
 
 
 
@@ -75,5 +75,5 @@ fn main() {
 //     println!("{:?}", neighborhood.state().jobs());
 
 
-}
+// }
 }

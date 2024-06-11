@@ -53,6 +53,6 @@ impl NeighborhoodFunction for MoveRM {
 
 impl ToString for MoveRM {
     fn to_string(&self) -> String {
-        format!("Move Regular ({})", self.repair)
+        format!("Move Regular ({})", if self.repair { "rep"} else { "norep" })
     }
 }

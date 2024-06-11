@@ -41,6 +41,7 @@ impl Neighborhood {
             Box::new(MoveMMToAny::new(true)),
             Box::new(AddTask::new(false, true)),
             Box::new(RemoveTask::new()),
+            Box::new(AddMM::new(true)),
         ];
         let selected = neighborhoods.choose(&mut thread_rng()).unwrap();
         // println!("-------------------------------\n{}", selected.to_string());

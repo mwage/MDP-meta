@@ -257,10 +257,6 @@ impl State {
         true
     }
 
-    pub fn mm_overlaps_with_other_mm(&self, resource: usize, end_time: usize) -> bool {
-        self.maj_maint_ends.iter().enumerate().any(|(res, end)| res != resource && (*end as isize - end_time as isize).abs() < self.instance.duration_major() as isize)
-    }
-
     pub fn can_add_task(&self, resource: usize, task_id: usize) -> bool {
         let start = self.instance.tasks()[task_id].start();
         let end = self.instance.tasks()[task_id].end();
@@ -639,6 +635,14 @@ impl State {
         overlapping
     }
 
+    // (res,  time)
+    pub fn get_other_mm_overlaps(&self, res: usize, end: usize) -> Vec<(usize, usize)> {
+        self.maj_maint_ends.iter().enumerate()
+            .filter(|(r, time)| *r != res && end.abs_diff(**time) < self.instance.duration_major())
+            .map(|(r, time)| (r, *time))
+            .collect()
+    }
+
     // (res, time)
     pub fn get_rand_rm(&self) -> Option<(usize, usize)> {
         let num_rm = self.reg_maint_ends.iter().flatten().count();
@@ -669,14 +673,14 @@ impl State {
         Some((res, self.maj_maint_ends[res]))
     }    
 
-    // (res, time)
-    pub fn get_rand_unassigned_mm(&self) -> Option<(usize, usize)> {
+    // (res)
+    pub fn get_rand_unassigned_mm(&self) -> Option<usize> {
         let num_unassigned = self.assigned_maj_maint.iter().filter(|b| !*b).count();
         if num_unassigned == 0 {
             return None;
         }
-        let res = self.assigned_maj_maint.iter().enumerate().filter(|(_, b)| !*b).skip(thread_rng().gen_range(0..num_unassigned)).next().unwrap().0;
-        Some((res, self.maj_maint_ends[res]))
+        
+        Some(self.assigned_maj_maint.iter().enumerate().filter(|(_, b)| !*b).skip(thread_rng().gen_range(0..num_unassigned)).next().unwrap().0)
     }
 
     // taskid

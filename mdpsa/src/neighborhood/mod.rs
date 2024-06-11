@@ -7,6 +7,7 @@ mod remove_rm;
 mod cover_task;
 mod add_task;
 mod remove_task;
+mod add_mm;
 
 use super::{State, Instance};
 
@@ -18,6 +19,7 @@ use remove_rm::RemoveRM;
 use cover_task::CoverTask;
 use add_task::AddTask;
 use remove_task::RemoveTask;
+use add_mm::AddMM;
 
 pub use neighborhood::Neighborhood;
 
@@ -34,7 +36,6 @@ pub enum ChangeToken {
     RemoveMM(usize, usize), // (res, time)
     AddTask(usize), // (task_id)
     RemoveTask(usize, usize), // (res, task_id)
-    // AddMM(usize, usize),   // (res, time)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,13 +47,10 @@ pub enum PenaltyToken {
 
 impl PenaltyToken {
     pub fn to_penalty(&self, instance: &Instance, multi: usize) -> usize {
-        let maint_multi = 2;
         multi * match self {
-            PenaltyToken::MajMaint => maint_multi * instance.duration_major(),
-            // PenaltyToken::MajMaint => 0,
-            PenaltyToken::RegMaintNotCovered(x) => *x,  // Does not scale as bad as non-assigned tasks/maint
-            // PenaltyToken::Task(i) => 0
-            PenaltyToken::Task(i) => instance.tasks()[*i].length()
+            PenaltyToken::MajMaint => instance.resources() * instance.duration_major(),
+            PenaltyToken::Task(i) => 2 * instance.tasks()[*i].length(),
+            PenaltyToken::RegMaintNotCovered(x) => *x,
         }
     }
 }

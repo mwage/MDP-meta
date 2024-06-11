@@ -35,6 +35,6 @@ impl NeighborhoodFunction for RemoveRM {
 
 impl ToString for RemoveRM {
     fn to_string(&self) -> String {
-        format!("Remove Regular ({})", self.repair)
+        format!("Remove Regular ({})", if self.repair { "rep"} else { "norep" })
     }
 }

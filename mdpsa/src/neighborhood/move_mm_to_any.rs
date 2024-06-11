@@ -49,6 +49,6 @@ impl NeighborhoodFunction for MoveMMToAny {
 
 impl ToString for MoveMMToAny {
     fn to_string(&self) -> String {
-        format!("Move Major To Any ({})", self.repair)
+        format!("Move Major To Any ({})", if self.repair { "rep"} else { "norep" })
     }
 }
